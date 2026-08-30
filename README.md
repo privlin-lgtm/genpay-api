@@ -97,10 +97,27 @@ The app seeds demo data on startup: one archive, one transcriptionist, one resea
 and one purchasable record (`CENSUS-1880-004`, $5.99). Interactive docs are at
 `/docs` once the server is running.
 
+## Database Migrations
+
+Schema changes are managed with Alembic rather than relying on `create_all` (which
+can only add missing tables, never express a rename, backfill, or constraint change):
+
+```bash
+alembic upgrade head                              # apply all migrations
+alembic revision --autogenerate -m "description"  # generate a new one after model changes
+alembic check                                      # verify models match the latest migration (used in CI)
+```
+
+`alembic/env.py` reads `DATABASE_URL` from the same `Settings` object the app uses,
+so both stay in sync from one source.
+
 ## Testing
 
 ```bash
-pytest
+pip install -r requirements-dev.txt
+ruff check app/ tests/ alembic/     # lint
+mypy app/                            # type-check
+pytest                                # 70 tests, in-memory SQLite
 ```
 
 ## Why This Project Matters

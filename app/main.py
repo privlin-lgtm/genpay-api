@@ -50,6 +50,11 @@ def _check_secrets_are_not_defaults() -> None:
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     _check_secrets_are_not_defaults()
+    # create_all is a dev convenience so `uvicorn app.main:app` works with zero
+    # setup — it's a no-op against a DB already at the current schema. Real
+    # deployments should run `alembic upgrade head` as an explicit deploy step
+    # instead of relying on this: create_all can't express a column rename, a
+    # backfill, or a constraint change, only "table doesn't exist yet? create it."
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
     try:

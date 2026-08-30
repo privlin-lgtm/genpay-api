@@ -15,12 +15,19 @@ known-first-party = ["app"]
 # bug B008 exists to catch.
 extend-immutable-calls = ["fastapi.Depends", "fastapi.Query", "fastapi.Header", "fastapi.Path", "fastapi.Body"]
 
+[tool.ruff.lint.per-file-ignores]
+# Alembic's own revision template uses Union[...] rather than X | Y; that's
+# generated boilerplate we don't hand-edit, not code worth reformatting on
+# every future migration.
+"alembic/versions/*.py" = ["UP007", "UP006"]
+
 [tool.mypy]
 python_version = "3.12"
 plugins = ["pydantic.mypy"]
 warn_unused_ignores = true
 warn_redundant_casts = true
 check_untyped_defs = true
+exclude = ["^alembic/versions/"]
 
 [[tool.mypy.overrides]]
 module = "alembic.*"
