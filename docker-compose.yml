@@ -1,0 +1,14 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: genpay
+      POSTGRES_PASSWORD: genpay
+      POSTGRES_DB: genpay
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U genpay"]
+      interval: 5s
+      timeout: 5s
+      retries: 10

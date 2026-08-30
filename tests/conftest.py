@@ -1,3 +1,5 @@
+import os
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -22,15 +24,30 @@ from app.models import (  # noqa: F401
     user,
 )
 
+# Defaults to an isolated in-memory SQLite DB per test. CI also runs this exact
+# suite against a real Postgres service by setting TEST_DATABASE_URL — the
+# atomic-UPDATE fix in ledger_account_repository and the SAVEPOINT/rollback
+# behavior documented in the idempotency repositories were both motivated by
+# Postgres semantics, so "the tests pass" should mean that on Postgres too, not
+# just on SQLite's much more forgiving single-writer locking.
+TEST_DATABASE_URL = os.environ.get("TEST_DATABASE_URL", "sqlite:///:memory:")
+
 
 @pytest.fixture()
 def client():
-    engine = create_engine(
-        "sqlite:///:memory:",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
+    if TEST_DATABASE_URL.startswith("sqlite"):
+        engine = create_engine(
+            TEST_DATABASE_URL,
+            connect_args={"check_same_thread": False},
+            poolclass=StaticPool,
+        )
+    else:
+        engine = create_engine(TEST_DATABASE_URL)
+
     TestSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+    # drop_all first: against a persistent DB (Postgres) a previous crashed run
+    # could have left tables behind; against a fresh :memory: SQLite it's a no-op.
+    Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
 
     def override_get_db():
@@ -62,3 +79,5 @@ def client():
         yield test_client
 
     app.dependency_overrides.clear()
+    Base.metadata.drop_all(bind=engine)
+    engine.dispose()

@@ -120,6 +120,16 @@ mypy app/                            # type-check
 pytest                                # 70 tests, in-memory SQLite
 ```
 
+The same suite also runs against real PostgreSQL in CI (`.github/workflows/ci.yml`),
+since a couple of fixes (the atomic ledger-balance UPDATE, the idempotency-claim
+SAVEPOINT behavior) are motivated by Postgres semantics that SQLite's much more
+forgiving single-writer locking doesn't exercise. To run it locally:
+
+```bash
+docker compose up -d
+TEST_DATABASE_URL=postgresql+psycopg://genpay:genpay@localhost:5432/genpay pytest
+```
+
 ## Why This Project Matters
 
 This project combines modern fintech infrastructure with genealogy and historical preservation.

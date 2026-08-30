@@ -1,0 +1,82 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements-dev.txt
+      - run: ruff check app/ tests/ alembic/
+      - run: mypy app/
+
+  migrations:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - name: Apply migrations to a fresh SQLite DB
+        env:
+          DATABASE_URL: sqlite:///./ci_migrations_test.db
+        run: alembic upgrade head
+      - name: Verify models match the latest migration (no drift)
+        env:
+          DATABASE_URL: sqlite:///./ci_migrations_test.db
+        run: alembic check
+
+  test-sqlite:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - run: pytest -v
+
+  test-postgres:
+    # Several fixes in this codebase (atomic balance UPDATEs, the idempotency
+    # SAVEPOINT/rollback behavior documented in the repositories) were reasoned
+    # about in terms of Postgres semantics but could only be exercised against
+    # SQLite locally. This job is what actually proves them, not just SQLite's
+    # much more forgiving single-writer locking.
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: genpay
+          POSTGRES_PASSWORD: genpay
+          POSTGRES_DB: genpay
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U genpay"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - name: Apply migrations against real Postgres
+        env:
+          DATABASE_URL: postgresql+psycopg://genpay:genpay@localhost:5432/genpay
+        run: alembic upgrade head
+      - name: Run full test suite against real Postgres
+        env:
+          TEST_DATABASE_URL: postgresql+psycopg://genpay:genpay@localhost:5432/genpay
+        run: pytest -v
