@@ -68,5 +68,7 @@ def adjust_balance(db: Session, account_id: str, delta_cents: int) -> LedgerAcco
         .values(balance_cents=LedgerAccount.balance_cents + delta_cents)
     )
     account = db.get(LedgerAccount, account_id)
+    if account is None:
+        raise ValueError(f"Ledger account not found: {account_id}")
     db.refresh(account)  # the bulk UPDATE bypassed the ORM, so the identity map is stale
     return account

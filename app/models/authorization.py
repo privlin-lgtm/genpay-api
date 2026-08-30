@@ -1,6 +1,7 @@
 import enum
 import uuid
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import DateTime, ForeignKey, Integer, String, func
 from sqlalchemy import Enum as SAEnum
@@ -8,8 +9,13 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database.db import Base
 
+if TYPE_CHECKING:
+    from app.models.research_record import ResearchRecord
+    from app.models.settlement import Settlement
+    from app.models.user import User
 
-class AuthorizationStatus(str, enum.Enum):
+
+class AuthorizationStatus(enum.StrEnum):
     pending = "pending"
     authorized = "authorized"
     declined = "declined"

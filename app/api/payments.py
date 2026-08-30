@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db, require_api_key
+from app.models.authorization import Authorization
 from app.repositories import authorization_repository, idempotency_key_repository
 from app.schemas.purchase import PurchaseDetail, PurchaseRequest, PurchaseResult
 from app.services.payment_service import purchase_record
@@ -42,7 +43,7 @@ def purchase(
 
 
 @router.get("/purchases/{authorization_id}", response_model=PurchaseDetail)
-def get_purchase(authorization_id: str, db: Session = Depends(get_db)) -> PurchaseDetail:
+def get_purchase(authorization_id: str, db: Session = Depends(get_db)) -> Authorization:
     authorization = authorization_repository.get(db, authorization_id)
     if not authorization:
         raise HTTPException(status_code=404, detail="Purchase not found")

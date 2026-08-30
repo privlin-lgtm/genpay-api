@@ -1,10 +1,16 @@
 import uuid
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import DateTime, ForeignKey, Integer, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database.db import Base
+
+if TYPE_CHECKING:
+    from app.models.authorization import Authorization
+    from app.models.historical_archive import HistoricalArchive
+    from app.models.user import User
 
 
 class ResearchRecord(Base):

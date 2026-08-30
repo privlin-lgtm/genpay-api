@@ -40,5 +40,7 @@ def try_claim(db: Session, key: str) -> bool:
 
 def store_result(db: Session, key: str, response_body: str) -> None:
     record = db.get(IdempotencyKey, key)
+    if record is None:
+        raise ValueError(f"No claim exists for idempotency key: {key}")
     record.response_body = response_body
     db.flush()

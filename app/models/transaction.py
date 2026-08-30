@@ -1,6 +1,7 @@
 import enum
 import uuid
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import DateTime, ForeignKey, Integer, String, func
 from sqlalchemy import Enum as SAEnum
@@ -8,13 +9,17 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database.db import Base
 
+if TYPE_CHECKING:
+    from app.models.ledger_account import LedgerAccount
+    from app.models.settlement import Settlement
 
-class TransactionType(str, enum.Enum):
+
+class TransactionType(enum.StrEnum):
     debit = "debit"
     credit = "credit"
 
 
-class TransactionStatus(str, enum.Enum):
+class TransactionStatus(enum.StrEnum):
     pending = "pending"
     posted = "posted"
     reversed = "reversed"

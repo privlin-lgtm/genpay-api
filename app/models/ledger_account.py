@@ -1,6 +1,7 @@
 import enum
 import uuid
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Integer, String, func
 from sqlalchemy import Enum as SAEnum
@@ -8,14 +9,19 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database.db import Base
 
+if TYPE_CHECKING:
+    from app.models.historical_archive import HistoricalArchive
+    from app.models.transaction import Transaction
+    from app.models.user import User
 
-class LedgerAccountOwnerType(str, enum.Enum):
+
+class LedgerAccountOwnerType(enum.StrEnum):
     user = "user"
     archive = "archive"
     platform = "platform"
 
 
-class LedgerAccountStatus(str, enum.Enum):
+class LedgerAccountStatus(enum.StrEnum):
     active = "active"
     suspended = "suspended"
     closed = "closed"

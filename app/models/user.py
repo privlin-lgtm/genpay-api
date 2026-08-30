@@ -1,6 +1,7 @@
 import enum
 import uuid
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import DateTime, String, func
 from sqlalchemy import Enum as SAEnum
@@ -8,8 +9,14 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database.db import Base
 
+if TYPE_CHECKING:
+    from app.models.authorization import Authorization
+    from app.models.historical_archive import HistoricalArchive
+    from app.models.ledger_account import LedgerAccount
+    from app.models.research_record import ResearchRecord
 
-class UserRole(str, enum.Enum):
+
+class UserRole(enum.StrEnum):
     researcher = "researcher"
     transcriptionist = "transcriptionist"
     platform_admin = "platform_admin"

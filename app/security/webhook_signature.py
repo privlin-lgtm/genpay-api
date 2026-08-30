@@ -50,7 +50,7 @@ def verify_webhook_signature(secret: str):
             parts = dict(part.split("=", 1) for part in x_genpay_signature.split(","))
             timestamp = int(parts["t"])
             provided_signature = parts["v1"]
-        except (KeyError, ValueError):
+        except (KeyError, ValueError) as exc:
             raise HTTPException(
                 status_code=401,
                 detail={
@@ -59,7 +59,7 @@ def verify_webhook_signature(secret: str):
                         "message": f"Could not parse {SIGNATURE_HEADER} header",
                     }
                 },
-            )
+            ) from exc
 
         if abs(time.time() - timestamp) > SIGNATURE_TOLERANCE_SECONDS:
             raise HTTPException(
