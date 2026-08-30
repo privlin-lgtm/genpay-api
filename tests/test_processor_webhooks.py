@@ -1,6 +1,6 @@
 import json
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from app.config import settings
 from app.security.webhook_signature import sign_payload
@@ -12,7 +12,7 @@ def _envelope(event_type: str, data: dict, event_id: str | None = None) -> bytes
     body = {
         "event_id": event_id or f"evt_{uuid.uuid4().hex[:12]}",
         "event_type": event_type,
-        "occurred_at": datetime.now(timezone.utc).isoformat(),
+        "occurred_at": datetime.now(UTC).isoformat(),
         "data": data,
     }
     return json.dumps(body).encode("utf-8")
@@ -63,7 +63,7 @@ def test_full_lifecycle_authorization_created_approved_settled(client):
             "authorization.approved",
             {
                 "authorization_id": processor_auth_id,
-                "hold_expires_at": (datetime.now(timezone.utc) + timedelta(days=7)).isoformat(),
+                "hold_expires_at": (datetime.now(UTC) + timedelta(days=7)).isoformat(),
             },
         ),
     )
@@ -183,7 +183,7 @@ def test_stale_timestamp_is_rejected(client):
             "card_network": "visa",
         },
     )
-    ten_minutes_ago = int(datetime.now(timezone.utc).timestamp()) - 600
+    ten_minutes_ago = int(datetime.now(UTC).timestamp()) - 600
     response = _post(client, raw_body, timestamp=ten_minutes_ago)
     assert response.status_code == 401
     assert response.json()["detail"]["error"]["code"] == "signature_expired"
@@ -218,7 +218,7 @@ def test_duplicate_event_id_is_ignored_not_reprocessed(client):
         "authorization.approved",
         {
             "authorization_id": "auth_dup",
-            "hold_expires_at": (datetime.now(timezone.utc) + timedelta(days=7)).isoformat(),
+            "hold_expires_at": (datetime.now(UTC) + timedelta(days=7)).isoformat(),
         },
     )
     approved = _post(client, approve_body)
@@ -316,7 +316,7 @@ def test_approving_unknown_authorization_returns_400(client):
         "authorization.approved",
         {
             "authorization_id": "auth_does_not_exist",
-            "hold_expires_at": (datetime.now(timezone.utc) + timedelta(days=7)).isoformat(),
+            "hold_expires_at": (datetime.now(UTC) + timedelta(days=7)).isoformat(),
         },
     )
     response = _post(client, raw_body)

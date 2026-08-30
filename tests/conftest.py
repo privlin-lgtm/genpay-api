@@ -6,8 +6,8 @@ from sqlalchemy.pool import StaticPool
 
 from app.config import settings
 from app.database.db import Base, get_db
-from app.main import app
 from app.database.seed_data import seed
+from app.main import app
 
 # Import models so they register on Base.metadata before create_all runs.
 from app.models import (  # noqa: F401
