@@ -1,6 +1,6 @@
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
@@ -21,8 +21,21 @@ require_valid_signature = verify_webhook_signature(settings.webhook_signing_secr
 
 
 @router.post("/card-auth", response_model=PurchaseResult)
-def card_authorization(event: CardAuthorizationEvent, db: Session = Depends(get_db)) -> PurchaseResult:
-    """Legacy synchronous demo path — authorizes and settles a purchase in one call."""
+async def card_authorization(request: Request, db: Session = Depends(get_db)) -> PurchaseResult:
+    """
+    Legacy synchronous demo path — authorizes and settles a purchase in one call.
+
+    Parses the request body via model_validate_json() rather than letting FastAPI
+    inject an already-json.loads()'d dict: `amount` is a Decimal, and validating
+    straight from the raw JSON text lets pydantic-core read "5.99" as an exact
+    decimal instead of round-tripping it through a Python float first.
+    """
+    raw_body = await request.body()
+    try:
+        event = CardAuthorizationEvent.model_validate_json(raw_body)
+    except ValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
     try:
         return handle_card_authorization(db, event)
     except ValueError as exc:
@@ -53,7 +66,7 @@ def processor_events(
         "webhook.received", extra={"event_id": envelope.event_id, "event_type": envelope.event_type}
     )
 
-    if processed_webhook_event_repository.has_processed(db, envelope.event_id):
+    if not processed_webhook_event_repository.try_claim(db, envelope.event_id, envelope.event_type):
         logger.info("webhook.duplicate_ignored", extra={"event_id": envelope.event_id})
         return {"status": "ignored", "reason": "already_processed", "event_id": envelope.event_id}
 
@@ -64,20 +77,13 @@ def processor_events(
             "webhook.processing_failed",
             extra={"event_id": envelope.event_id, "event_type": envelope.event_type, "error": str(exc)},
         )
+        # get_db() rolls back the whole request on this exception, including the
+        # claim row above — the event_id is not burned, a corrected retry can
+        # still succeed.
         raise HTTPException(
             status_code=400,
             detail={"error": {"code": "event_processing_failed", "message": str(exc)}},
         ) from exc
-
-    if not processed_webhook_event_repository.mark_processed(db, envelope.event_id, envelope.event_type):
-        # Lost the race to a concurrent delivery of the same event_id: the
-        # has_processed check above and this insert aren't one atomic operation,
-        # so both requests could have run the handler. Each handler has its own
-        # domain-level guard (existence/status checks in processor_event_service),
-        # which prevents duplicate ledger postings in the common case, but this
-        # isn't a hard guarantee without row-level locking on the authorization.
-        logger.warning("webhook.duplicate_after_processing", extra={"event_id": envelope.event_id})
-        return {"status": "ignored", "reason": "already_processed", "event_id": envelope.event_id}
 
     logger.info(
         "webhook.processed", extra={"event_id": envelope.event_id, "event_type": envelope.event_type}

@@ -20,7 +20,7 @@ def create(
         status=status,
     )
     db.add(txn)
-    db.commit()
+    db.flush()
     db.refresh(txn)
     return txn
 
@@ -29,10 +29,13 @@ def get(db: Session, transaction_id: str) -> Transaction | None:
     return db.get(Transaction, transaction_id)
 
 
-def list_all(db: Session, ledger_account_id: str | None = None) -> list[Transaction]:
+def list_all(
+    db: Session, ledger_account_id: str | None = None, limit: int = 50, offset: int = 0
+) -> list[Transaction]:
     stmt = select(Transaction)
     if ledger_account_id:
         stmt = stmt.where(Transaction.ledger_account_id == ledger_account_id)
+    stmt = stmt.order_by(Transaction.created_at).limit(limit).offset(offset)
     return list(db.scalars(stmt))
 
 

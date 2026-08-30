@@ -8,7 +8,7 @@ from app.schemas.user import UserCreate
 def create(db: Session, data: UserCreate) -> User:
     user = User(name=data.name, email=data.email, role=data.role)
     db.add(user)
-    db.commit()
+    db.flush()
     db.refresh(user)
     return user
 
@@ -17,5 +17,6 @@ def get(db: Session, user_id: str) -> User | None:
     return db.get(User, user_id)
 
 
-def list_all(db: Session) -> list[User]:
-    return list(db.scalars(select(User)))
+def list_all(db: Session, limit: int = 50, offset: int = 0) -> list[User]:
+    stmt = select(User).order_by(User.created_at).limit(limit).offset(offset)
+    return list(db.scalars(stmt))

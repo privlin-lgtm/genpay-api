@@ -17,5 +17,5 @@ def get_record_by_reference(db: Session, record_reference: str) -> ResearchRecor
     return research_record_repository.get_by_reference(db, record_reference)
 
 
-def list_records(db: Session) -> list[ResearchRecord]:
-    return research_record_repository.list_all(db)
+def list_records(db: Session, limit: int = 50, offset: int = 0) -> list[ResearchRecord]:
+    return research_record_repository.list_all(db, limit=limit, offset=offset)

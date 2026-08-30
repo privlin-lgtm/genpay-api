@@ -1,7 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_db
+from app.api.deps import get_db, require_api_key
 from app.schemas.research_record import ResearchRecordCreate, ResearchRecordRead
 from app.services import record_service
 
@@ -9,11 +9,17 @@ router = APIRouter(prefix="/records", tags=["records"])
 
 
 @router.get("", response_model=list[ResearchRecordRead])
-def list_records(db: Session = Depends(get_db)) -> list[ResearchRecordRead]:
-    return record_service.list_records(db)
+def list_records(
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    db: Session = Depends(get_db),
+) -> list[ResearchRecordRead]:
+    return record_service.list_records(db, limit=limit, offset=offset)
 
 
-@router.post("", response_model=ResearchRecordRead, status_code=201)
+@router.post(
+    "", response_model=ResearchRecordRead, status_code=201, dependencies=[Depends(require_api_key)]
+)
 def create_record(data: ResearchRecordCreate, db: Session = Depends(get_db)) -> ResearchRecordRead:
     return record_service.create_record(db, data)
 

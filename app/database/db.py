@@ -15,8 +15,19 @@ class Base(DeclarativeBase):
 
 
 def get_db() -> Generator[Session, None, None]:
+    """
+    One request = one transaction. Repositories only flush(); this is the single
+    place that commits. Any exception raised anywhere during the request —
+    including an HTTPException raised deliberately by a route — rolls back
+    everything written so far, so a partially-applied purchase or ledger posting
+    can never be left committed to disk.
+    """
     db = SessionLocal()
     try:
         yield db
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
     finally:
         db.close()

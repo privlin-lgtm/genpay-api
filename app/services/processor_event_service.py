@@ -6,7 +6,7 @@ from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from app.models.authorization import AuthorizationStatus
-from app.repositories import authorization_repository
+from app.repositories import authorization_repository, research_record_repository, user_repository
 from app.schemas.webhook import (
     AuthorizationApprovedData,
     AuthorizationCreatedData,
@@ -35,6 +35,14 @@ def _handle_authorization_created(db: Session, data: dict) -> dict[str, Any]:
 
     if authorization_repository.get_by_external_reference(db, payload.authorization_id) is not None:
         raise ValueError(f"Authorization already exists: {payload.authorization_id}")
+
+    # SQLite doesn't enforce foreign keys by default, so an invalid
+    # research_record_id/user_id would otherwise insert silently and only
+    # surface as a confusing failure later, at settlement time.
+    if research_record_repository.get(db, payload.merchant_reference.research_record_id) is None:
+        raise ValueError(f"Unknown research_record_id: {payload.merchant_reference.research_record_id}")
+    if user_repository.get(db, payload.merchant_reference.user_id) is None:
+        raise ValueError(f"Unknown user_id: {payload.merchant_reference.user_id}")
 
     authorization = authorization_repository.create_pending(
         db,

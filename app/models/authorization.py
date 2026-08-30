@@ -20,9 +20,9 @@ class Authorization(Base):
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     research_record_id: Mapped[str] = mapped_column(
-        String, ForeignKey("research_records.id"), nullable=False
+        String, ForeignKey("research_records.id"), nullable=False, index=True
     )
-    user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), nullable=False)
+    user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), nullable=False, index=True)
     amount_cents: Mapped[int] = mapped_column(Integer, nullable=False)
     external_reference: Mapped[str] = mapped_column(String, unique=True, index=True, nullable=False)
     decline_reason: Mapped[str | None] = mapped_column(String, nullable=True)

@@ -16,5 +16,5 @@ def get_user(db: Session, user_id: str) -> User | None:
     return user_repository.get(db, user_id)
 
 
-def list_users(db: Session) -> list[User]:
-    return user_repository.list_all(db)
+def list_users(db: Session, limit: int = 50, offset: int = 0) -> list[User]:
+    return user_repository.list_all(db, limit=limit, offset=offset)

@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///./genpay.db"
     secret_key: str = "change-me"
     webhook_signing_secret: str = "change-me"
+    internal_api_key: str = "change-me"
 
     # Revenue split, in basis points (1% = 100 bps) so the default 70/20/10 split
     # is exact integer math with no floating-point representation error. Override

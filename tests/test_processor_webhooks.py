@@ -240,6 +240,77 @@ def test_unsupported_event_type_returns_400(client):
     assert response.json()["detail"]["error"]["code"] == "malformed_payload"
 
 
+def test_retrying_a_failed_event_id_with_a_corrected_payload_succeeds(client):
+    record, researcher = _seed_context(client)
+    event_id = f"evt_{uuid.uuid4().hex[:12]}"
+    processor_auth_id = f"auth_{uuid.uuid4().hex[:10]}"
+
+    # Missing required fields (card_last4, card_network) fails Pydantic
+    # validation inside the handler.
+    bad_body = _envelope(
+        "authorization.created",
+        {
+            "authorization_id": processor_auth_id,
+            "merchant_reference": {"research_record_id": record["id"], "user_id": researcher["id"]},
+            "amount_cents": record["price_cents"],
+        },
+        event_id=event_id,
+    )
+    failed = _post(client, bad_body)
+    assert failed.status_code == 400
+
+    # Same event_id, corrected payload: the failed attempt's claim must not have
+    # permanently burned the event_id.
+    good_body = _envelope(
+        "authorization.created",
+        {
+            "authorization_id": processor_auth_id,
+            "merchant_reference": {"research_record_id": record["id"], "user_id": researcher["id"]},
+            "amount_cents": record["price_cents"],
+            "card_last4": "4242",
+            "card_network": "visa",
+        },
+        event_id=event_id,
+    )
+    retried = _post(client, good_body)
+    assert retried.status_code == 200
+    assert retried.json()["status"] == "processed"
+
+
+def test_authorization_created_with_unknown_research_record_returns_400(client):
+    _, researcher = _seed_context(client)
+    raw_body = _envelope(
+        "authorization.created",
+        {
+            "authorization_id": f"auth_{uuid.uuid4().hex[:10]}",
+            "merchant_reference": {"research_record_id": "does-not-exist", "user_id": researcher["id"]},
+            "amount_cents": 599,
+            "card_last4": "4242",
+            "card_network": "visa",
+        },
+    )
+    response = _post(client, raw_body)
+    assert response.status_code == 400
+    assert "Unknown research_record_id" in response.json()["detail"]["error"]["message"]
+
+
+def test_authorization_created_with_unknown_user_returns_400(client):
+    record, _ = _seed_context(client)
+    raw_body = _envelope(
+        "authorization.created",
+        {
+            "authorization_id": f"auth_{uuid.uuid4().hex[:10]}",
+            "merchant_reference": {"research_record_id": record["id"], "user_id": "does-not-exist"},
+            "amount_cents": 599,
+            "card_last4": "4242",
+            "card_network": "visa",
+        },
+    )
+    response = _post(client, raw_body)
+    assert response.status_code == 400
+    assert "Unknown user_id" in response.json()["detail"]["error"]["message"]
+
+
 def test_approving_unknown_authorization_returns_400(client):
     raw_body = _envelope(
         "authorization.approved",

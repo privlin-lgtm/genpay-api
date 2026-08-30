@@ -14,7 +14,7 @@ def create(db: Session, data: ResearchRecordCreate) -> ResearchRecord:
         transcriptionist_user_id=data.transcriptionist_user_id,
     )
     db.add(record)
-    db.commit()
+    db.flush()
     db.refresh(record)
     return record
 
@@ -27,5 +27,6 @@ def get_by_reference(db: Session, record_reference: str) -> ResearchRecord | Non
     return db.scalar(select(ResearchRecord).where(ResearchRecord.record_reference == record_reference))
 
 
-def list_all(db: Session) -> list[ResearchRecord]:
-    return list(db.scalars(select(ResearchRecord)))
+def list_all(db: Session, limit: int = 50, offset: int = 0) -> list[ResearchRecord]:
+    stmt = select(ResearchRecord).order_by(ResearchRecord.created_at).limit(limit).offset(offset)
+    return list(db.scalars(stmt))

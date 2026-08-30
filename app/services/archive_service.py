@@ -16,5 +16,5 @@ def get_archive(db: Session, archive_id: str) -> HistoricalArchive | None:
     return historical_archive_repository.get(db, archive_id)
 
 
-def list_archives(db: Session) -> list[HistoricalArchive]:
-    return historical_archive_repository.list_all(db)
+def list_archives(db: Session, limit: int = 50, offset: int = 0) -> list[HistoricalArchive]:
+    return historical_archive_repository.list_all(db, limit=limit, offset=offset)

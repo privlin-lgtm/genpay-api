@@ -1,14 +1,20 @@
 from datetime import datetime
+from decimal import Decimal
 from typing import Literal
 
 from pydantic import BaseModel
 
 
 class CardAuthorizationEvent(BaseModel):
-    """Payload for the legacy synchronous /webhooks/card-auth demo endpoint."""
+    """
+    Payload for the legacy synchronous /webhooks/card-auth demo endpoint.
+    amount is a Decimal (not float) so "5.99" parses exactly instead of picking
+    up float representation error — only exact when the route parses the raw
+    JSON body via model_validate_json rather than a pre-parsed dict.
+    """
 
     event_type: str
-    amount: float
+    amount: Decimal
     record_id: str
     user_id: str | None = None
 

@@ -41,5 +41,7 @@ def post_entries(db: Session, settlement_id: str, entries: list[LedgerEntry]) ->
     return transactions
 
 
-def list_transactions(db: Session, ledger_account_id: str | None = None) -> list[Transaction]:
-    return transaction_repository.list_all(db, ledger_account_id=ledger_account_id)
+def list_transactions(
+    db: Session, ledger_account_id: str | None = None, limit: int = 50, offset: int = 0
+) -> list[Transaction]:
+    return transaction_repository.list_all(db, ledger_account_id=ledger_account_id, limit=limit, offset=offset)

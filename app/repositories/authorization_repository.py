@@ -16,7 +16,7 @@ def create(db: Session, research_record_id: str, user_id: str, amount_cents: int
         status=AuthorizationStatus.authorized,
     )
     db.add(authorization)
-    db.commit()
+    db.flush()
     db.refresh(authorization)
     return authorization
 
@@ -33,14 +33,14 @@ def create_pending(
         status=AuthorizationStatus.pending,
     )
     db.add(authorization)
-    db.commit()
+    db.flush()
     db.refresh(authorization)
     return authorization
 
 
 def mark_approved(db: Session, authorization: Authorization) -> Authorization:
     authorization.status = AuthorizationStatus.authorized
-    db.commit()
+    db.flush()
     db.refresh(authorization)
     return authorization
 
@@ -48,7 +48,7 @@ def mark_approved(db: Session, authorization: Authorization) -> Authorization:
 def mark_declined(db: Session, authorization: Authorization, reason: str) -> Authorization:
     authorization.status = AuthorizationStatus.declined
     authorization.decline_reason = reason
-    db.commit()
+    db.flush()
     db.refresh(authorization)
     return authorization
 

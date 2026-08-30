@@ -23,8 +23,12 @@ class Transaction(Base):
     __tablename__ = "transactions"
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    ledger_account_id: Mapped[str] = mapped_column(String, ForeignKey("ledger_accounts.id"), nullable=False)
-    settlement_id: Mapped[str] = mapped_column(String, ForeignKey("settlements.id"), nullable=False)
+    ledger_account_id: Mapped[str] = mapped_column(
+        String, ForeignKey("ledger_accounts.id"), nullable=False, index=True
+    )
+    settlement_id: Mapped[str] = mapped_column(
+        String, ForeignKey("settlements.id"), nullable=False, index=True
+    )
     type: Mapped[TransactionType] = mapped_column(SAEnum(TransactionType), nullable=False)
     amount_cents: Mapped[int] = mapped_column(Integer, nullable=False)
     currency: Mapped[str] = mapped_column(String, nullable=False, default="USD")

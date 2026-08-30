@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app.api import accounts, archives, ledger, payments, records, users, webhooks
+from app.config import settings
 from app.database.db import Base, SessionLocal, engine
 from app.database.seed_data import seed
 
@@ -12,6 +13,7 @@ from app.database.seed_data import seed
 from app.models import (  # noqa: F401
     authorization,
     historical_archive,
+    idempotency_key,
     ledger_account,
     processed_webhook_event,
     research_record,
@@ -22,9 +24,32 @@ from app.models import (  # noqa: F401
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 
+_DEFAULT_SECRETS = {
+    "secret_key": settings.secret_key,
+    "webhook_signing_secret": settings.webhook_signing_secret,
+    "internal_api_key": settings.internal_api_key,
+}
+
+
+def _check_secrets_are_not_defaults() -> None:
+    """
+    Fails startup rather than silently running with a secret that's public
+    knowledge (it's literally the default in this repo's source). A webhook
+    signature or API key check is worthless if the secret it's checked against
+    is "change-me" for everyone who ever cloned this project.
+    """
+    if settings.env == "production":
+        defaulted = [name for name, value in _DEFAULT_SECRETS.items() if value == "change-me"]
+        if defaulted:
+            raise RuntimeError(
+                f"Refusing to start in production with default secret(s): {', '.join(defaulted)}. "
+                "Set them via environment variables."
+            )
+
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    _check_secrets_are_not_defaults()
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
     try:

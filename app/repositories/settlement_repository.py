@@ -11,7 +11,7 @@ def create(db: Session, authorization_id: str, settled_amount_cents: int) -> Set
         status=SettlementStatus.settled,
     )
     db.add(settlement)
-    db.commit()
+    db.flush()
     db.refresh(settlement)
     return settlement
 
