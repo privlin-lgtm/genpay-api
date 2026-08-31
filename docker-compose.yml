@@ -6,7 +6,10 @@ services:
       POSTGRES_PASSWORD: genpay
       POSTGRES_DB: genpay
     ports:
-      - "5432:5432"
+      # Host-side 5433, not 5432: avoids colliding with any Postgres already
+      # installed natively on the host machine. The container's own internal
+      # port stays 5432 — this only affects the URL you connect with locally.
+      - "5433:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U genpay"]
       interval: 5s

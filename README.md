@@ -264,7 +264,7 @@ alembic check                                      # verify models match the lat
 
 ```bash
 docker compose up -d
-TEST_DATABASE_URL=postgresql+psycopg://genpay:genpay@localhost:5432/genpay pytest
+TEST_DATABASE_URL=postgresql+psycopg://genpay:genpay@localhost:5433/genpay pytest
 ```
 
 ## Project structure
