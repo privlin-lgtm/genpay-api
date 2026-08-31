@@ -1,0 +1,43 @@
+name: Nightly Reconciliation
+
+# Demonstrates the reconciliation check running on a schedule, the way it would
+# against a real production DATABASE_URL. This project has no deployed,
+# persistent database to actually monitor, so this job seeds a fresh SQLite DB,
+# runs a purchase through it, and reconciles that — proving the check itself
+# works end-to-end, not standing in for real production monitoring. Pointing
+# this at a real deployment means swapping DATABASE_URL for a repository
+# secret and dropping the seed/purchase step.
+
+on:
+  schedule:
+    - cron: "0 9 * * *" # 09:00 UTC daily
+  workflow_dispatch: {}
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+
+      - name: Boot the app once to create + seed the schema, then perform a purchase
+        env:
+          DATABASE_URL: sqlite:///./reconciliation_demo.db
+        run: |
+          uvicorn app.main:app --port 8000 &
+          for i in $(seq 1 20); do curl -sf http://127.0.0.1:8000/health && break; sleep 1; done
+          RECORD_ID=$(curl -s http://127.0.0.1:8000/records | python3 -c "import json,sys;print(json.load(sys.stdin)[0]['id'])")
+          USER_ID=$(curl -s -H "X-API-Key: change-me" http://127.0.0.1:8000/users | python3 -c "import json,sys;d=json.load(sys.stdin);print([u for u in d if u['role']=='researcher'][0]['id'])")
+          curl -sf -X POST http://127.0.0.1:8000/purchase \
+            -H "X-API-Key: change-me" -H "Idempotency-Key: reconciliation-demo-1" \
+            -H "Content-Type: application/json" \
+            -d "{\"research_record_id\": \"$RECORD_ID\", \"user_id\": \"$USER_ID\"}"
+          kill %1
+
+      - name: Run reconciliation
+        env:
+          DATABASE_URL: sqlite:///./reconciliation_demo.db
+        run: python scripts/reconcile.py

@@ -4,13 +4,14 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from app.api import accounts, archives, ledger, payments, records, users, webhooks
+from app.api import accounts, archives, ledger, payments, reconciliation, records, users, webhooks
 from app.config import settings
 from app.database.db import Base, SessionLocal, engine
 from app.database.seed_data import seed
 
 # Import models so they register on Base.metadata before create_all runs.
 from app.models import (  # noqa: F401
+    api_client,
     authorization,
     historical_archive,
     idempotency_key,
@@ -73,6 +74,7 @@ app.include_router(accounts.router)
 app.include_router(ledger.router)
 app.include_router(payments.router)
 app.include_router(webhooks.router)
+app.include_router(reconciliation.router)
 
 
 @app.get("/health", tags=["health"])
