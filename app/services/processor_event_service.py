@@ -5,8 +5,14 @@ from typing import Any
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
+from app.constants import PROCESSOR_WEBHOOK_CLIENT_NAME
 from app.models.authorization import AuthorizationStatus
-from app.repositories import authorization_repository, research_record_repository, user_repository
+from app.repositories import (
+    api_client_repository,
+    authorization_repository,
+    research_record_repository,
+    user_repository,
+)
 from app.schemas.webhook import (
     AuthorizationApprovedData,
     AuthorizationCreatedData,
@@ -44,12 +50,14 @@ def _handle_authorization_created(db: Session, data: dict) -> dict[str, Any]:
     if user_repository.get(db, payload.merchant_reference.user_id) is None:
         raise ValueError(f"Unknown user_id: {payload.merchant_reference.user_id}")
 
+    processor_client = api_client_repository.get_by_name(db, PROCESSOR_WEBHOOK_CLIENT_NAME)
     authorization = authorization_repository.create_pending(
         db,
         research_record_id=payload.merchant_reference.research_record_id,
         user_id=payload.merchant_reference.user_id,
         amount_cents=payload.amount_cents,
         external_reference=payload.authorization_id,
+        created_by_client_id=processor_client.id if processor_client else None,
     )
     logger.info(
         "authorization.created: hold requested",

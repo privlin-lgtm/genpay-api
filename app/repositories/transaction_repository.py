@@ -41,3 +41,19 @@ def list_all(
 
 def list_for_settlement(db: Session, settlement_id: str) -> list[Transaction]:
     return list(db.scalars(select(Transaction).where(Transaction.settlement_id == settlement_id)))
+
+
+def mark_reversed(db: Session, transaction_id: str) -> Transaction:
+    """
+    Flags a transaction as reversed for query/display purposes — never changes
+    its amount_cents or type. The audit trail is the *set* of rows for a
+    settlement, not a mutation of any single one: a reversal is new offsetting
+    rows plus this status flag on the originals, not an edit to what happened.
+    """
+    txn = db.get(Transaction, transaction_id)
+    if txn is None:
+        raise ValueError(f"Transaction not found: {transaction_id}")
+    txn.status = TransactionStatus.reversed
+    db.flush()
+    db.refresh(txn)
+    return txn

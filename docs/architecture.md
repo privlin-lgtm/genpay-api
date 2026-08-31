@@ -95,13 +95,22 @@ LedgerAccount
 ├── status                 (active | suspended | closed)
 └── created_at
 
+ApiClient
+├── id (PK)
+├── name                        unique, e.g. "internal-admin", "processor-webhook"
+├── api_key_hash                sha256 of the raw key — never stored in plaintext
+├── is_active
+└── created_at
+
 Authorization
 ├── id (PK)
 ├── research_record_id (FK → ResearchRecord)
 ├── user_id (FK → User)        ← the purchasing researcher
 ├── amount_cents
 ├── external_reference          simulated card-processor auth ID
-├── status                     (authorized | declined | expired)
+├── decline_reason
+├── status                     (pending | authorized | declined | expired)
+├── created_by_client_id (FK → ApiClient, nullable)  ← who/what initiated this
 └── created_at
 
 Settlement
@@ -145,7 +154,10 @@ provisions its ledger account in the same call (`user_service.create_user`,
 | `GET` | `/ledger` | List transactions (filterable by `account_id`) |
 | `POST` | `/purchase` | Authorize + settle a researcher's purchase of a record; triggers the revenue split |
 | `GET` | `/purchases/{authorization_id}` | Purchase (authorization) detail |
-| `POST` | `/webhooks/card-auth` | Receive a simulated card-authorization event from the "processor" |
+| `POST` | `/purchases/{authorization_id}/refund` | Fully reverse a settled purchase — new offsetting entries, originals never mutated |
+| `GET` | `/reconciliation` | Re-verify every ledger account's balance against its transaction history |
+| `POST` | `/webhooks/card-auth` | Receive a simulated card-authorization event from the "processor" (legacy synchronous path) |
+| `POST` | `/webhooks/processor-events` | Realistic async path: `authorization.created`/`.approved`/`.declined`/`settlement.completed`, HMAC-signed |
 | `GET` | `/health` | Liveness check |
 
 ## 5. Payment Lifecycle

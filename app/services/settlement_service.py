@@ -1,7 +1,8 @@
 from sqlalchemy.orm import Session
 
+from app.constants import PROCESSOR_WEBHOOK_CLIENT_NAME
 from app.models.user import UserRole
-from app.repositories import research_record_repository, user_repository
+from app.repositories import api_client_repository, research_record_repository, user_repository
 from app.schemas.purchase import PurchaseResult
 from app.schemas.webhook import CardAuthorizationEvent
 from app.services.payment_service import purchase_record
@@ -23,5 +24,12 @@ def handle_card_authorization(db: Session, event: CardAuthorizationEvent) -> Pur
             raise ValueError("No researcher account available to settle against")
         user_id = researchers[0].id
 
+    processor_client = api_client_repository.get_by_name(db, PROCESSOR_WEBHOOK_CLIENT_NAME)
     amount_cents = round(event.amount * 100)
-    return purchase_record(db, research_record_id=record.id, user_id=user_id, amount_cents=amount_cents)
+    return purchase_record(
+        db,
+        research_record_id=record.id,
+        user_id=user_id,
+        amount_cents=amount_cents,
+        created_by_client_id=processor_client.id if processor_client else None,
+    )

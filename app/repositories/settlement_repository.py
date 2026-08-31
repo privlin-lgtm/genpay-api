@@ -22,3 +22,10 @@ def get(db: Session, settlement_id: str) -> Settlement | None:
 
 def get_by_authorization(db: Session, authorization_id: str) -> Settlement | None:
     return db.scalar(select(Settlement).where(Settlement.authorization_id == authorization_id))
+
+
+def mark_reversed(db: Session, settlement: Settlement) -> Settlement:
+    settlement.status = SettlementStatus.reversed
+    db.flush()
+    db.refresh(settlement)
+    return settlement

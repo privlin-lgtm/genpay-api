@@ -1,11 +1,14 @@
 from fastapi import APIRouter, Depends, Header, HTTPException
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db, require_api_key
+from app.models.api_client import ApiClient
 from app.models.authorization import Authorization
 from app.repositories import authorization_repository, idempotency_key_repository
 from app.schemas.purchase import PurchaseDetail, PurchaseRequest, PurchaseResult
-from app.services.payment_service import purchase_record
+from app.schemas.refund import RefundResult
+from app.services.payment_service import purchase_record, refund_settlement
 
 router = APIRouter(tags=["payments"], dependencies=[Depends(require_api_key)])
 
@@ -14,6 +17,7 @@ router = APIRouter(tags=["payments"], dependencies=[Depends(require_api_key)])
 def purchase(
     data: PurchaseRequest,
     idempotency_key: str = Header(..., alias="Idempotency-Key"),
+    client: ApiClient = Depends(require_api_key),
     db: Session = Depends(get_db),
 ) -> PurchaseResult:
     """
@@ -32,7 +36,12 @@ def purchase(
         )
 
     try:
-        result = purchase_record(db, research_record_id=data.research_record_id, user_id=data.user_id)
+        result = purchase_record(
+            db,
+            research_record_id=data.research_record_id,
+            user_id=data.user_id,
+            created_by_client_id=client.id,
+        )
     except ValueError as exc:
         # get_db() rolls back this whole request on the exception, including the
         # claim above — the key isn't burned, so a corrected retry can reuse it.
@@ -48,3 +57,25 @@ def get_purchase(authorization_id: str, db: Session = Depends(get_db)) -> Author
     if not authorization:
         raise HTTPException(status_code=404, detail="Purchase not found")
     return authorization
+
+
+class RefundRequest(BaseModel):
+    reason: str | None = None
+
+
+@router.post("/purchases/{authorization_id}/refund", response_model=RefundResult)
+def refund_purchase(
+    authorization_id: str, data: RefundRequest | None = None, db: Session = Depends(get_db)
+) -> RefundResult:
+    """
+    No Idempotency-Key here, unlike POST /purchase: a refund's own state machine
+    (settled -> reversed) already makes a retry safe without one — a second call
+    finds the settlement no longer `settled` and returns 400 rather than
+    double-refunding, so there's no window where retrying silently repeats the
+    side effect the way an unprotected POST /purchase would.
+    """
+    reason = data.reason if data else None
+    try:
+        return refund_settlement(db, authorization_id, reason=reason)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc

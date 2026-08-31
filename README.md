@@ -40,7 +40,10 @@ to skip in production:
 | Retry safety | Hope the client doesn't double-click | Idempotency keys claimed *before* processing, not after — closes the exact race window a naive implementation leaves open |
 | Transaction integrity | Commit after every write | One transaction per request; a failure anywhere rolls back everything, so the ledger can't be left half-posted |
 | Schema evolution | `create_all()` and hope | Alembic migrations, verified against the models in CI |
-| "Does it work on Postgres?" | Untested assumption | A real Postgres 16 service container runs the full suite in CI |
+| "Does it work on Postgres?" | Untested assumption | A real Postgres 16 service container runs the full suite in CI — verified locally too, not just claimed |
+| Caller identity | One shared "admin" secret | Per-caller `ApiClient`s, resolved by key hash; ledger-affecting writes stamp `created_by_client_id` |
+| Refunds | `TransactionStatus.reversed` exists, nothing sets it | A real reversal path: new offsetting entries, originals flagged not mutated, ledger stays append-only |
+| "Is the ledger still correct?" | Trust the write-time invariant forever | A reconciliation check re-verifies `balance == sum(transactions)` independently, on demand or on a schedule |
 
 Full write-up of the bugs that shaped these decisions — including one where the
 ORM's own identity map made a broken transaction look fixed when it wasn't — is in
@@ -137,6 +140,26 @@ total exactly, for every possible amount — proven with a parametrized sweep ac
 test demonstrating the naive `round(total * pct)` approach actually loses a cent at
 `total_cents = 2`.
 
+### Refunds & reversals
+
+`POST /purchases/{id}/refund` fully reverses a settled purchase by posting a
+*new* set of transactions with each original entry's type flipped — never by
+mutating the originals. Every affected balance nets back to exactly its
+pre-purchase value; the originals are flagged `reversed` for display but keep
+their real amount and type forever. No idempotency key is needed here: the
+settlement's own state machine (`settled -> reversed`) already makes a retry
+return `400` instead of double-refunding.
+
+### Reconciliation
+
+`GET /reconciliation` independently re-derives every `LedgerAccount`'s balance
+from its full transaction history and compares it against the stored
+`balance_cents` — the invariant the atomic `UPDATE` guarantees at write time,
+checked again after the fact, so a future bug or a bypassed service layer
+can't drift silently. `scripts/reconcile.py` runs the same check as a
+cron/CI-schedulable job (see `.github/workflows/reconciliation.yml`), exiting
+non-zero on any discrepancy so a scheduler can alert on it.
+
 ### Webhook architecture
 
 `POST /webhooks/processor-events` receives a Stripe-shaped event envelope
@@ -161,7 +184,12 @@ Every request:
   `Idempotency-Key`; retrying a timed-out request returns the original result
   instead of creating a second purchase
 - **Auditability** — `Authorization` → `Settlement` → `Transaction` rows are never
-  deleted or mutated after posting
+  deleted or mutated after posting; refunds add new offsetting rows rather than
+  editing history
+- **Per-caller actor attribution** — every internal request resolves to an
+  `ApiClient` by key hash (not one shared secret), and ledger-affecting writes
+  stamp `created_by_client_id`, including a distinct system actor for
+  webhook-originated purchases
 
 ## API walkthrough
 
@@ -214,7 +242,7 @@ Full endpoint reference, request/response shapes, and error codes:
 
 ## Testing strategy
 
-**70 tests**, organized by what they're actually proving rather than by file
+**87 tests**, organized by what they're actually proving rather than by file
 mechanics:
 
 | Category | What it proves | Example |
@@ -233,7 +261,7 @@ single-writer locking doesn't exercise the same way. "The tests pass" means that
 both, not just the one that's convenient to run locally.
 
 ```bash
-pytest                    # 70 tests, in-memory SQLite, ~1.5s
+pytest                    # 87 tests, in-memory SQLite, ~1.5s
 ruff check app/ tests/ alembic/
 mypy app/
 ```
@@ -280,7 +308,7 @@ app/
 └── database/        # engine/session setup, seed data
 
 alembic/              # schema migrations
-tests/                 # 70 tests: unit, integration, regression, security
+tests/                 # 87 tests: unit, integration, regression, security
 docs/                  # architecture, API spec, payment flow, engineering journal
 ```
 

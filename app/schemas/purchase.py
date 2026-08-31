@@ -22,6 +22,7 @@ class PurchaseResult(BaseModel):
     archive_cents: int
     transcriptionist_cents: int
     platform_cents: int
+    created_by_client_id: str | None = None
     transactions: list[TransactionRead]
 
 
@@ -34,4 +35,5 @@ class PurchaseDetail(BaseModel):
     amount_cents: int
     external_reference: str
     status: AuthorizationStatus
+    created_by_client_id: str | None
     created_at: datetime

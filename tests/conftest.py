@@ -13,6 +13,7 @@ from app.main import app
 
 # Import models so they register on Base.metadata before create_all runs.
 from app.models import (  # noqa: F401
+    api_client,
     authorization,
     historical_archive,
     idempotency_key,

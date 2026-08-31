@@ -11,9 +11,16 @@ amount (parsed as `Decimal`, not `float`, to avoid precision loss).
 
 Every endpoint except catalog browsing (`GET /records`, `GET /archives`) and the two
 webhook endpoints (which use their own mechanisms — see below) requires an
-`X-API-Key` header matching `INTERNAL_API_KEY`. A missing or wrong key returns `401`.
-This is a single shared key gating internal/financial routes — not per-caller auth or
-role scoping, which a real deployment would want.
+`X-API-Key` header. The key is resolved by its hash against the `ApiClient` table
+(`app/repositories/api_client_repository.py`), not compared against one shared
+secret — a missing key, a wrong key, and a disabled client's key all return `401`
+identically. The seeded dev client's key is `change-me` (`INTERNAL_API_KEY`), which
+every example in this doc uses. Mutating financial routes stamp the resolved
+client's id onto what they create (`Authorization.created_by_client_id`) — a
+webhook-originated purchase is attributed to a distinct seeded system client,
+`processor-webhook`, since webhooks authenticate via signature instead. There's no
+per-caller role scoping yet — every active client can do everything an active
+client can do.
 
 ## Pagination
 
@@ -84,8 +91,9 @@ seed script, never directly via the API. Returns `owner_type`, whichever of
 ### `GET /ledger?account_id=<id>`
 List transactions, optionally filtered to one ledger account. Each transaction
 carries `ledger_account_id`, `settlement_id`, `type` (`debit`/`credit`),
-`amount_cents`, `status` (always `posted` once returned — pending/failed states
-aren't currently surfaced through this API), and `created_at`.
+`amount_cents`, `status` (`posted`, or `reversed` for an original transaction
+a refund has offset — its `amount_cents`/`type` are never changed, only this
+flag), and `created_at`.
 
 ---
 
@@ -113,7 +121,43 @@ ledger accounts are missing.
 
 ### `GET /purchases/{authorization_id}`
 Returns the `Authorization` row (not the full settlement detail) — status,
-amount, `external_reference`, timestamps.
+amount, `external_reference`, `created_by_client_id`, timestamps.
+
+### `POST /purchases/{authorization_id}/refund`
+Request: `{ "reason": "<optional string>" }` (body may be omitted entirely).
+
+Fully reverses a settled purchase: posts a new transaction set with each
+original entry's type flipped (same accounts, same amounts), which nets every
+affected balance back to its pre-purchase value. The original transactions
+are never mutated — only flagged `status: "reversed"` — and the settlement
+itself moves `settled` -> `reversed`. Returns a `RefundResult`:
+`authorization_id`, `settlement_id`, `settlement_status`, `refunded_cents`,
+`reason`, and the four new offsetting `Transaction` rows.
+
+No `Idempotency-Key` needed here — retrying after a successful refund finds
+the settlement no longer `settled` and gets `400`, not a second reversal.
+
+`400` if the authorization doesn't exist, was never settled, or was already
+refunded.
+
+---
+
+## Reconciliation
+
+### `GET /reconciliation`
+Re-derives every `LedgerAccount`'s balance from its full transaction history
+(summing every `posted` and `reversed` transaction — both had their effect
+actually applied when created) and compares it against the stored
+`balance_cents`. Returns `{ accounts_checked, discrepancies: [...] }`; an
+empty `discrepancies` list means the ledger is internally consistent. Each
+discrepancy carries `ledger_account_id`, `owner_type`, `stored_balance_cents`,
+`computed_balance_cents`, and `drift_cents`.
+
+Meant for both on-demand checks and a scheduled job —
+`scripts/reconcile.py` runs the same check standalone (no API key needed,
+works even if the app itself is down) and exits non-zero on any discrepancy,
+for a cron or CI schedule to alert on. See
+`.github/workflows/reconciliation.yml` for a runnable example.
 
 ---
 

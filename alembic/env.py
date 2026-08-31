@@ -8,6 +8,7 @@ from app.database.db import Base
 
 # Import every model so they register on Base.metadata before autogenerate runs.
 from app.models import (  # noqa: F401
+    api_client,
     authorization,
     historical_archive,
     idempotency_key,

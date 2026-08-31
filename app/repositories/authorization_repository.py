@@ -6,7 +6,13 @@ from sqlalchemy.orm import Session
 from app.models.authorization import Authorization, AuthorizationStatus
 
 
-def create(db: Session, research_record_id: str, user_id: str, amount_cents: int) -> Authorization:
+def create(
+    db: Session,
+    research_record_id: str,
+    user_id: str,
+    amount_cents: int,
+    created_by_client_id: str | None = None,
+) -> Authorization:
     """Synchronous demo path: authorize and hold in one step (no separate approval webhook)."""
     authorization = Authorization(
         research_record_id=research_record_id,
@@ -14,6 +20,7 @@ def create(db: Session, research_record_id: str, user_id: str, amount_cents: int
         amount_cents=amount_cents,
         external_reference=f"sim_card_auth_{uuid.uuid4().hex[:12]}",
         status=AuthorizationStatus.authorized,
+        created_by_client_id=created_by_client_id,
     )
     db.add(authorization)
     db.flush()
@@ -22,7 +29,12 @@ def create(db: Session, research_record_id: str, user_id: str, amount_cents: int
 
 
 def create_pending(
-    db: Session, research_record_id: str, user_id: str, amount_cents: int, external_reference: str
+    db: Session,
+    research_record_id: str,
+    user_id: str,
+    amount_cents: int,
+    external_reference: str,
+    created_by_client_id: str | None = None,
 ) -> Authorization:
     """Async processor path: an authorization.created event arrives before approval/decline is known."""
     authorization = Authorization(
@@ -31,6 +43,7 @@ def create_pending(
         amount_cents=amount_cents,
         external_reference=external_reference,
         status=AuthorizationStatus.pending,
+        created_by_client_id=created_by_client_id,
     )
     db.add(authorization)
     db.flush()
