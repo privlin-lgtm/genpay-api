@@ -1,3 +1,7 @@
 -r requirements.txt
 ruff==0.16.5
 mypy==2.3.1
+
+# Only needed for scripts/capture_screenshots.py (regenerating README screenshots
+# against a running instance) — not used by the app or the test suite.
+playwright==1.62.0
