@@ -59,16 +59,17 @@ flowchart TB
     end
 
     subgraph API["FastAPI — app/api/"]
-        Auth["X-API-Key auth<br/>(internal routes)"]
+        Auth["Per-client X-API-Key auth<br/>(resolved by key hash)"]
         Sig["HMAC signature verify<br/>(processor webhooks)"]
         Idem["Idempotency-Key claim<br/>(before processing)"]
     end
 
     subgraph Services["app/services/ — business logic"]
-        Payment[payment_service<br/>authorize → settle]
+        Payment[payment_service<br/>authorize → settle → refund]
         Split[revenue_split<br/>basis-point + largest-remainder]
         Ledger[ledger_service<br/>balanced entry posting]
         Processor[processor_event_service<br/>webhook state machine]
+        Recon[reconciliation_service<br/>independent balance re-check]
     end
 
     subgraph Repos["app/repositories/ — the only DB-touching layer"]
@@ -76,6 +77,7 @@ flowchart TB
     end
 
     subgraph DB["PostgreSQL / SQLite"]
+        Clients[(api_clients)]
         Users[(users)]
         Ledger_T[(ledger_accounts)]
         Auth_T[(authorizations)]
@@ -87,9 +89,11 @@ flowchart TB
     C2 --> Sig --> Processor --> Payment
     Payment --> Split
     Payment --> Ledger
+    Recon --> R1
     Ledger --> R1
     Payment --> R1
     Processor --> R1
+    Auth --> R1
     R1 --> DB
 ```
 
@@ -221,6 +225,33 @@ $0.60 platform credit, four balanced ledger postings, no rounding gap:
 
 ![POST /purchase executed, showing the real 200 response with revenue split](docs/screenshots/swagger-purchase-executed.png)
 
+### Example: refund a purchase
+
+```bash
+curl -X POST http://127.0.0.1:8000/purchases/$AUTHORIZATION_ID/refund \
+  -H "x-api-key: change-me" \
+  -H "Content-Type: application/json" \
+  -d '{"reason": "duplicate charge"}'
+```
+
+Posts four new offsetting transactions (never mutating the originals) and moves
+the settlement `settled` → `reversed`. No `Idempotency-Key` needed — retrying
+finds the settlement already reversed and returns `400` rather than refunding twice.
+
+### Example: check the ledger is still internally consistent
+
+```bash
+curl http://127.0.0.1:8000/reconciliation -H "x-api-key: change-me"
+```
+```json
+{ "accounts_checked": 4, "discrepancies": [] }
+```
+
+A non-empty `discrepancies` array means some account's stored balance no longer
+matches the sum of its transaction history — exactly the invariant
+`scripts/reconcile.py` checks on a schedule (see
+[.github/workflows/reconciliation.yml](.github/workflows/reconciliation.yml)).
+
 ### Example: simulated card-processor webhook
 
 ```bash
@@ -310,6 +341,8 @@ app/
 alembic/              # schema migrations
 tests/                 # 87 tests: unit, integration, regression, security
 docs/                  # architecture, API spec, payment flow, engineering journal
+scripts/               # reconcile.py (cron/CI-schedulable), capture_screenshots.py
+.github/workflows/     # ci.yml (lint, migrations, SQLite + Postgres tests), reconciliation.yml
 ```
 
 Layering is enforced by convention, not by a framework: `api` never imports
