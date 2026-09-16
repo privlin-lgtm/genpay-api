@@ -40,4 +40,5 @@ jobs:
       - name: Run reconciliation
         env:
           DATABASE_URL: sqlite:///./reconciliation_demo.db
+          PYTHONPATH: ${{ github.workspace }}
         run: python scripts/reconcile.py
