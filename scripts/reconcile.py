@@ -15,9 +15,22 @@ import sys
 
 from app.database.db import SessionLocal
 
-# Import models so they register on Base.metadata (unused directly, but
-# reconcile_all queries LedgerAccount/Transaction, which must be mapped).
-from app.models import ledger_account, transaction  # noqa: F401
+# Import every model so they all register on Base.metadata before any query
+# runs — reconcile_all queries LedgerAccount/Transaction, and LedgerAccount's
+# relationships reference User/HistoricalArchive by name, so mapper
+# configuration fails at query time unless those are registered too.
+from app.models import (  # noqa: F401
+    api_client,
+    authorization,
+    historical_archive,
+    idempotency_key,
+    ledger_account,
+    processed_webhook_event,
+    research_record,
+    settlement,
+    transaction,
+    user,
+)
 from app.services.reconciliation_service import reconcile_all
 
 
