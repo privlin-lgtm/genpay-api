@@ -31,14 +31,15 @@ pip install -r requirements-dev.txt  # + ruff, mypy, etc. for lint/type-check
 uvicorn app.main:app --reload
 
 # Tests
-pytest                              # 87 tests, in-memory SQLite, ~2s
+pytest                              # 94 tests, in-memory SQLite, ~2s
 pytest -v
 pytest tests/test_revenue_split.py  # single file
 pytest tests/test_revenue_split.py::test_name  # single test
 
-# Lint / type-check (both run in CI)
+# Lint / type-check / architecture contracts (all run in CI)
 ruff check app/ tests/ alembic/
 mypy app/
+lint-imports                        # import-linter layering contracts in pyproject.toml
 
 # Migrations
 alembic upgrade head                              # apply all migrations
@@ -56,9 +57,15 @@ are the only public routes. Interactive docs at `/docs` once running.
 
 ## Architecture
 
-Strict layering, enforced by convention (not a framework):
-`app/api/` → `app/services/` → `app/repositories/` → DB. `api` never imports
-`repositories` directly; `services` never construct raw SQL.
+Strict layering: `app/api/` → `app/services/` → `app/repositories/` → DB.
+`api` never imports `repositories` directly; `services` never construct raw
+SQL. Enforced, not just convention: `lint-imports` checks the import
+contracts in `pyproject.toml` (`[tool.importlinter]`), and
+`tests/test_architecture.py` checks what import-linter can't (no
+`sqlalchemy.text`/`.execute()` in api or services, no `.commit()` outside
+`get_db()` and startup seeding, and `mcp_server/` never imports `app.*`). When
+one fails, its message states the rule and the reason: fix the code, don't
+loosen the contract.
 
 ```
 app/
