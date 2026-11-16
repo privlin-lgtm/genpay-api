@@ -3,8 +3,8 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_db, require_api_key
 from app.models.ledger_account import LedgerAccount
-from app.repositories import ledger_account_repository
 from app.schemas.ledger_account import LedgerAccountRead
+from app.services import account_service
 
 router = APIRouter(prefix="/accounts", tags=["accounts"], dependencies=[Depends(require_api_key)])
 
@@ -15,12 +15,12 @@ def list_accounts(
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
 ) -> list[LedgerAccount]:
-    return ledger_account_repository.list_all(db, limit=limit, offset=offset)
+    return account_service.list_accounts(db, limit=limit, offset=offset)
 
 
 @router.get("/{account_id}", response_model=LedgerAccountRead)
 def get_account(account_id: str, db: Session = Depends(get_db)) -> LedgerAccount:
-    account = ledger_account_repository.get(db, account_id)
+    account = account_service.get_account(db, account_id)
     if not account:
         raise HTTPException(status_code=404, detail="Account not found")
     return account

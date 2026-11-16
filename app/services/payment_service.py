@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session
 
-from app.models.authorization import AuthorizationStatus
+from app.models.authorization import Authorization, AuthorizationStatus
 from app.models.settlement import SettlementStatus
 from app.models.transaction import TransactionType
 from app.repositories import (
@@ -123,6 +123,10 @@ def settle_authorization(
         created_by_client_id=authorization.created_by_client_id,
         transactions=[TransactionRead.model_validate(t) for t in transactions],
     )
+
+
+def get_authorization(db: Session, authorization_id: str) -> Authorization | None:
+    return authorization_repository.get(db, authorization_id)
 
 
 def refund_settlement(db: Session, authorization_id: str, reason: str | None = None) -> RefundResult:

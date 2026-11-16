@@ -17,6 +17,7 @@ jobs:
       - run: pip install -r requirements-dev.txt
       - run: ruff check app/ tests/ alembic/
       - run: mypy app/
+      - run: lint-imports
 
   migrations:
     runs-on: ubuntu-latest

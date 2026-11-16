@@ -273,7 +273,7 @@ Full endpoint reference, request/response shapes, and error codes:
 
 ## Testing strategy
 
-**87 tests**, organized by what they're actually proving rather than by file
+**94 tests**, organized by what they're actually proving rather than by file
 mechanics:
 
 | Category | What it proves | Example |
@@ -292,9 +292,10 @@ single-writer locking doesn't exercise the same way. "The tests pass" means that
 both, not just the one that's convenient to run locally.
 
 ```bash
-pytest                    # 87 tests, in-memory SQLite, ~1.5s
+pytest                    # 94 tests, in-memory SQLite, ~1.5s
 ruff check app/ tests/ alembic/
 mypy app/
+lint-imports              # layering contracts (import-linter)
 ```
 
 ## Getting Started
@@ -339,12 +340,14 @@ app/
 └── database/        # engine/session setup, seed data
 
 alembic/              # schema migrations
-tests/                 # 87 tests: unit, integration, regression, security
+tests/                 # 94 tests: unit, integration, regression, security, architecture
 docs/                  # architecture, API spec, payment flow, engineering journal
 scripts/               # reconcile.py (cron/CI-schedulable), capture_screenshots.py
 .github/workflows/     # ci.yml (lint, migrations, SQLite + Postgres tests), reconciliation.yml
 ```
 
-Layering is enforced by convention, not by a framework: `api` never imports
-`repositories` directly, `services` never construct raw SQL. See
+Layering is enforced in CI: `api` never imports `repositories` directly,
+`services` never construct raw SQL, and only `get_db()` commits. `lint-imports`
+(import-linter contracts in `pyproject.toml`) and `tests/test_architecture.py`
+fail the build if any of that breaks. See
 [docs/architecture.md](docs/architecture.md) for the reasoning behind each layer.

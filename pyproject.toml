@@ -32,3 +32,39 @@ exclude = ["^alembic/versions/"]
 [[tool.mypy.overrides]]
 module = "alembic.*"
 ignore_missing_imports = true
+
+# Architecture contracts, checked by `lint-imports` (import-linter) in CI.
+# Each name is the rule plus the reason, because the name is what an agent or a
+# reviewer sees when a contract breaks. Rules import-linter can't express (raw
+# SQL, commit(), mcp_server/ staying HTTP-only) live in tests/test_architecture.py.
+[tool.importlinter]
+root_packages = ["app"]
+# Needed so a contract can name third-party modules (fastapi, starlette).
+include_external_packages = true
+
+[[tool.importlinter.contracts]]
+id = "layers"
+name = "Layers are api > services > repositories > models: a lower layer never imports a higher one, so data access doesn't depend on business rules and business rules don't depend on HTTP"
+type = "layers"
+layers = [
+    "app.api",
+    "app.services",
+    "app.repositories",
+    "app.models",
+]
+
+[[tool.importlinter.contracts]]
+id = "api-no-repositories"
+name = "api must not import repositories: services own the business and transaction rules, so a route calls a service instead"
+type = "forbidden"
+source_modules = ["app.api"]
+forbidden_modules = ["app.repositories"]
+# api -> services -> repositories is the intended path; only a direct import breaks the rule.
+allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+id = "no-http-below-api"
+name = "Only app.api may import fastapi or starlette: services raise plain exceptions and routes map them to HTTP status codes, so the core also works from scripts and the webhook handlers"
+type = "forbidden"
+source_modules = ["app.services", "app.repositories", "app.models", "app.schemas"]
+forbidden_modules = ["fastapi", "starlette"]
