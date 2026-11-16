@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.database.db import get_db
 from app.models.api_client import ApiClient
-from app.repositories import api_client_repository
+from app.services import auth_service
 
 __all__ = ["get_db", "require_api_key"]
 
@@ -40,8 +40,8 @@ def require_api_key(
     if x_api_key is None:
         raise HTTPException(status_code=401, detail="Invalid or missing X-API-Key")
 
-    client = api_client_repository.get_by_key(db, x_api_key)
-    if client is None or not client.is_active:
+    client = auth_service.authenticate(db, x_api_key)
+    if client is None:
         raise HTTPException(status_code=401, detail="Invalid or missing X-API-Key")
 
     return client

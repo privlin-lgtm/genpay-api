@@ -10,6 +10,7 @@ from app.models.authorization import AuthorizationStatus
 from app.repositories import (
     api_client_repository,
     authorization_repository,
+    processed_webhook_event_repository,
     research_record_repository,
     user_repository,
 )
@@ -23,6 +24,15 @@ from app.schemas.webhook import (
 from app.services.payment_service import settle_authorization
 
 logger = logging.getLogger("genpay.webhooks")
+
+
+def claim_event(db: Session, event_id: str, event_type: str) -> bool:
+    """
+    Atomically claims event_id before its handler runs; False means another
+    delivery already claimed it. The claim lives in the request's transaction,
+    so a failed handler rolls it back and the event_id isn't burned.
+    """
+    return processed_webhook_event_repository.try_claim(db, event_id, event_type)
 
 
 def handle_event(db: Session, envelope: ProcessorEventEnvelope) -> dict[str, Any]:

@@ -5,10 +5,10 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_db, require_api_key
 from app.models.api_client import ApiClient
 from app.models.authorization import Authorization
-from app.repositories import authorization_repository, idempotency_key_repository
 from app.schemas.purchase import PurchaseDetail, PurchaseRequest, PurchaseResult
 from app.schemas.refund import RefundResult
-from app.services.payment_service import purchase_record, refund_settlement
+from app.services import idempotency_service
+from app.services.payment_service import get_authorization, purchase_record, refund_settlement
 
 router = APIRouter(tags=["payments"], dependencies=[Depends(require_api_key)])
 
@@ -26,10 +26,10 @@ def purchase(
     creates a second real purchase — a second Authorization, Settlement, and set
     of ledger postings for what the client believes is one purchase.
     """
-    if cached := idempotency_key_repository.get(db, idempotency_key):
+    if cached := idempotency_service.get_cached_result(db, idempotency_key):
         return PurchaseResult.model_validate_json(cached)
 
-    if not idempotency_key_repository.try_claim(db, idempotency_key):
+    if not idempotency_service.try_claim(db, idempotency_key):
         raise HTTPException(
             status_code=409,
             detail="A request with this Idempotency-Key is already in progress or has completed",
@@ -47,13 +47,13 @@ def purchase(
         # claim above — the key isn't burned, so a corrected retry can reuse it.
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    idempotency_key_repository.store_result(db, idempotency_key, result.model_dump_json())
+    idempotency_service.store_result(db, idempotency_key, result.model_dump_json())
     return result
 
 
 @router.get("/purchases/{authorization_id}", response_model=PurchaseDetail)
 def get_purchase(authorization_id: str, db: Session = Depends(get_db)) -> Authorization:
-    authorization = authorization_repository.get(db, authorization_id)
+    authorization = get_authorization(db, authorization_id)
     if not authorization:
         raise HTTPException(status_code=404, detail="Purchase not found")
     return authorization

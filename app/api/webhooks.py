@@ -6,11 +6,10 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_db
 from app.config import settings
-from app.repositories import processed_webhook_event_repository
 from app.schemas.purchase import PurchaseResult
 from app.schemas.webhook import CardAuthorizationEvent, ProcessorEventEnvelope
 from app.security.webhook_signature import verify_webhook_signature
-from app.services.processor_event_service import handle_event
+from app.services.processor_event_service import claim_event, handle_event
 from app.services.settlement_service import handle_card_authorization
 
 logger = logging.getLogger("genpay.webhooks")
@@ -66,7 +65,7 @@ def processor_events(
         "webhook.received", extra={"event_id": envelope.event_id, "event_type": envelope.event_type}
     )
 
-    if not processed_webhook_event_repository.try_claim(db, envelope.event_id, envelope.event_type):
+    if not claim_event(db, envelope.event_id, envelope.event_type):
         logger.info("webhook.duplicate_ignored", extra={"event_id": envelope.event_id})
         return {"status": "ignored", "reason": "already_processed", "event_id": envelope.event_id}
 
