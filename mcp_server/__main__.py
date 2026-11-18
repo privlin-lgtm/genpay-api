@@ -6,6 +6,7 @@ Run the GenPay MCP server.
 """
 
 import argparse
+import ipaddress
 
 import httpx2
 import uvicorn
@@ -20,7 +21,17 @@ def main() -> None:
     parser.add_argument("--stdio", action="store_true", help="serve over stdio instead of HTTP")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8001)
+    parser.add_argument(
+        "--allow-remote",
+        action="store_true",
+        help="allow a non-loopback --host; the MCP endpoint has no auth of its own yet",
+    )
     args = parser.parse_args()
+    if not args.stdio and not _is_loopback(args.host) and not args.allow_remote:
+        parser.error(
+            f"--host {args.host} exposes the ledger to the network with no MCP-level auth; "
+            "keep the default 127.0.0.1, or pass --allow-remote behind your own auth proxy."
+        )
 
     config = load_config()
     http = httpx2.Client(base_url=config.api_url, timeout=config.timeout_seconds)
@@ -32,6 +43,15 @@ def main() -> None:
     # Stateless: no session kept between requests, so any instance can serve any call.
     app = server.streamable_http_app(stateless_http=True, json_response=True, host=args.host)
     uvicorn.run(app, host=args.host, port=args.port)
+
+
+def _is_loopback(host: str) -> bool:
+    if host == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
 
 
 if __name__ == "__main__":

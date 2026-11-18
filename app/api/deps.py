@@ -1,4 +1,4 @@
-from fastapi import Depends, Header, HTTPException
+from fastapi import Depends, Header, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from app.database.db import get_db
@@ -8,8 +8,11 @@ from app.services import auth_service
 __all__ = ["get_db", "require_api_key"]
 
 
+SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
+
+
 def require_api_key(
-    x_api_key: str | None = Header(default=None), db: Session = Depends(get_db)
+    request: Request, x_api_key: str | None = Header(default=None), db: Session = Depends(get_db)
 ) -> ApiClient:
     """
     Gates internal/financial routes (accounts, ledger, purchases, and every
@@ -43,5 +46,11 @@ def require_api_key(
     client = auth_service.authenticate(db, x_api_key)
     if client is None:
         raise HTTPException(status_code=401, detail="Invalid or missing X-API-Key")
+
+    # Read-only clients (the MCP server's mcp-agent) are stopped here, at the
+    # API, not just by which tools the MCP server registers: 403, not 401,
+    # because the key is valid, it just isn't allowed to write.
+    if request.method not in SAFE_METHODS and auth_service.is_read_only(client):
+        raise HTTPException(status_code=403, detail="This API key is read-only")
 
     return client

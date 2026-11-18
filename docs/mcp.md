@@ -57,6 +57,10 @@ The HTTP transport is stateless (no session kept between requests, so any
 instance can serve any call) and keeps the SDK's DNS-rebinding protection: a
 request whose `Host` header isn't the server's own is refused with 421.
 
+The MCP endpoint has no authentication of its own yet, so it binds to
+127.0.0.1 by default and refuses a non-loopback `--host` unless you pass
+`--allow-remote`, which only makes sense behind your own auth proxy.
+
 ## Auth
 
 The API seeds a dedicated `mcp-agent` `ApiClient`, keyed by `MCP_AGENT_API_KEY`
@@ -64,9 +68,14 @@ The API seeds a dedicated `mcp-agent` `ApiClient`, keyed by `MCP_AGENT_API_KEY`
 server never holds the `internal-admin` key. A database seeded before this
 client existed gets it on the next API startup.
 
-Honest limit: `ApiClient` has no scopes yet, so the `mcp-agent` key could call
-write routes directly. Read-only is enforced by which tools the server exposes,
-not by the API.
+Read-only is enforced twice. The server only registers GET tools, and the API
+itself refuses the `mcp-agent` key on any non-GET request with 403
+(`READ_ONLY_CLIENT_NAMES` in `app/constants.py`, checked in `require_api_key`).
+So a leaked `mcp-agent` key can read the ledger but never write to it.
+
+Rotating `MCP_AGENT_API_KEY` takes effect on the next API startup: the stored
+hash is updated and the old key stops working. Startup also refuses to run if
+`MCP_AGENT_API_KEY` equals `INTERNAL_API_KEY`.
 
 ## Errors
 

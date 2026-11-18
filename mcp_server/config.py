@@ -24,8 +24,17 @@ def load_config(env: dict[str, str] | None = None) -> McpConfig:
             "GENPAY_MCP_API_KEY is not set: the MCP server needs the mcp-agent client's API key "
             "(MCP_AGENT_API_KEY on the API side; 'change-me-mcp' in dev)."
         )
+    raw_timeout = source.get("GENPAY_MCP_TIMEOUT_SECONDS", "10")
+    try:
+        timeout = float(raw_timeout)
+    except ValueError:
+        timeout = 0.0
+    if timeout <= 0:
+        raise ConfigError(
+            f"GENPAY_MCP_TIMEOUT_SECONDS must be a positive number of seconds, got {raw_timeout!r}."
+        )
     return McpConfig(
         api_url=source.get("GENPAY_API_URL", DEFAULT_API_URL).rstrip("/"),
         api_key=api_key,
-        timeout_seconds=float(source.get("GENPAY_MCP_TIMEOUT_SECONDS", "10")),
+        timeout_seconds=timeout,
     )

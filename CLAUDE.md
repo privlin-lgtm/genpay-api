@@ -25,7 +25,7 @@ along the way — is in [docs/incidents.md](docs/incidents.md),
 uvicorn app.main:app --reload
 
 # Tests
-pytest                              # healthy: 121 passed, ~7s
+pytest                              # healthy: 136 passed, ~7s
 
 # Lint / type-check / architecture contracts (all run in CI)
 ruff check app/ tests/ alembic/ mcp_server/   # healthy: "All checks passed!"
@@ -139,7 +139,9 @@ system actor attributed to authorizations created via the signed webhook
 path (which never has an X-API-Key of its own to look up), and `mcp-agent`
 (key = `MCP_AGENT_API_KEY`, `change-me-mcp` in dev), the MCP server's
 identity. `mcp-agent` is checked separately from the rest of the seed, so an
-already-seeded database still gets it on the next startup.
+already-seeded database still gets it (and a rotated key) on the next
+startup. It is read-only at the API: `require_api_key` returns 403 for any
+non-GET request from a client in `READ_ONLY_CLIENT_NAMES`.
 
 ### Refunds
 

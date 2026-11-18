@@ -317,3 +317,118 @@ def test_production_refuses_the_default_mcp_agent_key(monkeypatch):
     )
     with pytest.raises(RuntimeError, match="mcp_agent_api_key"):
         main._check_secrets_are_not_defaults()
+
+
+def test_production_guard_is_wired_to_the_mcp_agent_setting():
+    from app import main
+
+    assert main._DEFAULT_SECRETS["mcp_agent_api_key"] == settings.mcp_agent_api_key
+
+
+def test_production_accepts_a_real_secret_that_starts_with_change_me(monkeypatch):
+    from app import main
+
+    monkeypatch.setattr(main.settings, "env", "production")
+    monkeypatch.setattr(main, "_DEFAULT_SECRETS", {"mcp_agent_api_key": "change-me-not-a-default-9f3"})
+    main._check_secrets_are_not_defaults()
+
+
+def test_startup_refuses_mcp_agent_sharing_the_internal_key(monkeypatch):
+    from app import main
+
+    monkeypatch.setattr(main.settings, "mcp_agent_api_key", main.settings.internal_api_key)
+    with pytest.raises(RuntimeError, match="MCP_AGENT_API_KEY must differ"):
+        main._check_api_keys_are_distinct()
+
+
+def test_rotating_the_mcp_agent_key_retires_the_old_one(monkeypatch):
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    from sqlalchemy.pool import StaticPool
+
+    from app.database.db import Base
+    from app.database.seed_data import seed
+    from app.repositories import api_client_repository
+
+    engine = create_engine(
+        "sqlite:///:memory:", connect_args={"check_same_thread": False}, poolclass=StaticPool
+    )
+    Base.metadata.create_all(bind=engine)
+    db = sessionmaker(bind=engine)()
+    try:
+        seed(db)
+        old_key = settings.mcp_agent_api_key
+        monkeypatch.setattr(settings, "mcp_agent_api_key", "rotated-key-7c1")
+
+        seed(db)
+
+        assert api_client_repository.get_by_key(db, "rotated-key-7c1") is not None
+        assert api_client_repository.get_by_key(db, old_key) is None
+    finally:
+        db.close()
+        engine.dispose()
+
+
+# --- the API itself keeps mcp-agent read-only ---------------------------------
+
+
+def test_mcp_agent_key_can_read_but_never_write(client):
+    agent = {"X-API-Key": settings.mcp_agent_api_key}
+    ids = seeded_ids(client)  # created with internal-admin
+    researcher = next(u for u in client.get("/users").json() if u["role"] == "researcher")
+    archive_id = client.get("/archives").json()[0]["id"]
+
+    assert client.get("/accounts", headers=agent).status_code == 200
+    writes = [
+        ("/purchase", {"research_record_id": ids["record"], "user_id": researcher["id"]}),
+        (f"/purchases/{ids['purchase']}/refund", None),
+        ("/records", {"archive_id": archive_id, "record_reference": "X-1", "title": "X", "price_cents": 100}),
+        ("/archives", {"name": "Rogue archive"}),
+        ("/users", {"name": "Rogue", "email": "rogue@example.com", "role": "researcher"}),
+    ]
+    for path, body in writes:
+        response = client.post(path, json=body, headers={**agent, "Idempotency-Key": f"agent-{path}"})
+        assert response.status_code == 403, (path, response.status_code)
+        assert response.json()["detail"] == "This API key is read-only"
+
+    # Nothing was written: the purchase is still unrefunded and reconciliation is clean.
+    assert client.get("/reconciliation").json()["discrepancies"] == []
+    assert client.get(f"/purchases/{ids['purchase']}").json()["status"] == "authorized"
+
+
+# --- robustness ---------------------------------------------------------------
+
+
+def test_non_json_success_body_is_a_readable_tool_error():
+    http = httpx2.Client(
+        base_url="http://api.local",
+        transport=httpx2.MockTransport(lambda request: httpx2.Response(200, text="<html>portal</html>")),
+    )
+    result = call(build_server(GenPayClient(http, "k")), "list_records")
+    assert result.is_error
+    assert "isn't JSON" in result.content[0].text
+
+
+@pytest.mark.parametrize("value", ["10s", "0", "-1"])
+def test_bad_timeout_is_a_config_error(value):
+    with pytest.raises(ConfigError, match="GENPAY_MCP_TIMEOUT_SECONDS"):
+        load_config({"GENPAY_MCP_API_KEY": "k", "GENPAY_MCP_TIMEOUT_SECONDS": value})
+
+
+def test_http_server_refuses_a_network_host_without_allow_remote(monkeypatch, capsys):
+    from mcp_server import __main__ as entry
+
+    monkeypatch.setattr("sys.argv", ["mcp_server", "--host", "0.0.0.0"])
+    with pytest.raises(SystemExit):
+        entry.main()
+    assert "--allow-remote" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    ("host", "loopback"),
+    [("127.0.0.1", True), ("localhost", True), ("::1", True), ("0.0.0.0", False), ("10.0.0.5", False)],
+)
+def test_loopback_detection(host, loopback):
+    from mcp_server.__main__ import _is_loopback
+
+    assert _is_loopback(host) is loopback

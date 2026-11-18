@@ -33,6 +33,20 @@ _DEFAULT_SECRETS = {
 }
 
 
+_PUBLIC_DEFAULTS = frozenset({"change-me", "change-me-mcp"})
+
+
+def _check_api_keys_are_distinct() -> None:
+    """
+    API keys are looked up by hash, so internal-admin and mcp-agent can't share
+    one: the second insert would hit the unique hash, the seed would roll back
+    silently, and the shared key would resolve to whichever client was created
+    first. Fail startup instead, in every environment.
+    """
+    if settings.mcp_agent_api_key == settings.internal_api_key:
+        raise RuntimeError("MCP_AGENT_API_KEY must differ from INTERNAL_API_KEY.")
+
+
 def _check_secrets_are_not_defaults() -> None:
     """
     Fails startup rather than silently running with a secret that's public
@@ -41,7 +55,7 @@ def _check_secrets_are_not_defaults() -> None:
     is "change-me" (or "change-me-mcp") for everyone who ever cloned this project.
     """
     if settings.env == "production":
-        defaulted = [name for name, value in _DEFAULT_SECRETS.items() if value.startswith("change-me")]
+        defaulted = [name for name, value in _DEFAULT_SECRETS.items() if value in _PUBLIC_DEFAULTS]
         if defaulted:
             raise RuntimeError(
                 f"Refusing to start in production with default secret(s): {', '.join(defaulted)}. "
@@ -52,6 +66,7 @@ def _check_secrets_are_not_defaults() -> None:
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     _check_secrets_are_not_defaults()
+    _check_api_keys_are_distinct()
     # create_all is a dev convenience so `uvicorn app.main:app` works with zero
     # setup — it's a no-op against a DB already at the current schema. Real
     # deployments should run `alembic upgrade head` as an explicit deploy step

@@ -40,7 +40,12 @@ class GenPayClient:
             raise ToolError(f"GenPay rejected the request: {_detail(response) or 'invalid input'}")
         if response.status_code >= 400:
             raise ToolError(f"GenPay API returned HTTP {response.status_code}.")
-        return response.json()
+        try:
+            return response.json()
+        except ValueError as exc:
+            raise ToolError(
+                "GenPay API returned a response that isn't JSON; check GENPAY_API_URL points at the API."
+            ) from exc
 
 
 def _detail(response: httpx2.Response) -> str | None:

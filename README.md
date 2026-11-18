@@ -292,7 +292,7 @@ single-writer locking doesn't exercise the same way. "The tests pass" means that
 both, not just the one that's convenient to run locally.
 
 ```bash
-pytest                    # 121 tests, in-memory SQLite, ~7s
+pytest                    # 136 tests, in-memory SQLite, ~7s
 ruff check app/ tests/ alembic/ mcp_server/
 mypy app/ mcp_server/
 lint-imports              # layering contracts (import-linter)
@@ -354,7 +354,7 @@ app/
 
 mcp_server/           # read-only MCP server: HTTP client of the API, never imports app
 alembic/              # schema migrations
-tests/                 # 121 tests: unit, integration, regression, security, architecture
+tests/                 # 136 tests: unit, integration, regression, security, architecture
 docs/                  # architecture, API spec, payment flow, engineering journal
 scripts/               # reconcile.py (cron/CI-schedulable), capture_screenshots.py
 .github/workflows/     # ci.yml (lint, migrations, SQLite + Postgres tests), reconciliation.yml
