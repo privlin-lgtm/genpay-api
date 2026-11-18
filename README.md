@@ -292,9 +292,9 @@ single-writer locking doesn't exercise the same way. "The tests pass" means that
 both, not just the one that's convenient to run locally.
 
 ```bash
-pytest                    # 94 tests, in-memory SQLite, ~1.5s
-ruff check app/ tests/ alembic/
-mypy app/
+pytest                    # 121 tests, in-memory SQLite, ~7s
+ruff check app/ tests/ alembic/ mcp_server/
+mypy app/ mcp_server/
 lint-imports              # layering contracts (import-linter)
 ```
 
@@ -311,6 +311,19 @@ The app seeds demo data on startup: one archive, one transcriptionist, one
 researcher, and one purchasable record (`CENSUS-1880-004`, $5.99). Every internal
 route needs `x-api-key: change-me` (the dev default); catalog browsing
 (`GET /records`, `GET /archives`) is public.
+
+### MCP server (read-only)
+
+`mcp_server/` exposes the API to Claude as eight read-only MCP tools (records,
+archives, accounts, ledger, purchases, reconciliation), over stateless HTTP or
+stdio. It only talks to the API over HTTP with its own `mcp-agent` key.
+
+```bash
+GENPAY_MCP_API_KEY=change-me-mcp python -m mcp_server   # http://127.0.0.1:8001/mcp
+claude mcp add --transport http genpay http://127.0.0.1:8001/mcp
+```
+
+Details, tool list and limits: [docs/mcp.md](docs/mcp.md).
 
 ### Database Migrations
 
@@ -339,8 +352,9 @@ app/
 ├── security/         # webhook signature verification
 └── database/        # engine/session setup, seed data
 
+mcp_server/           # read-only MCP server: HTTP client of the API, never imports app
 alembic/              # schema migrations
-tests/                 # 94 tests: unit, integration, regression, security, architecture
+tests/                 # 121 tests: unit, integration, regression, security, architecture
 docs/                  # architecture, API spec, payment flow, engineering journal
 scripts/               # reconcile.py (cron/CI-schedulable), capture_screenshots.py
 .github/workflows/     # ci.yml (lint, migrations, SQLite + Postgres tests), reconciliation.yml

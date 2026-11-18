@@ -15,8 +15,8 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install -r requirements-dev.txt
-      - run: ruff check app/ tests/ alembic/
-      - run: mypy app/
+      - run: ruff check app/ tests/ alembic/ mcp_server/
+      - run: mypy app/ mcp_server/
       - run: lint-imports
 
   migrations:

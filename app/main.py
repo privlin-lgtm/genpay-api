@@ -29,6 +29,7 @@ _DEFAULT_SECRETS = {
     "secret_key": settings.secret_key,
     "webhook_signing_secret": settings.webhook_signing_secret,
     "internal_api_key": settings.internal_api_key,
+    "mcp_agent_api_key": settings.mcp_agent_api_key,
 }
 
 
@@ -37,10 +38,10 @@ def _check_secrets_are_not_defaults() -> None:
     Fails startup rather than silently running with a secret that's public
     knowledge (it's literally the default in this repo's source). A webhook
     signature or API key check is worthless if the secret it's checked against
-    is "change-me" for everyone who ever cloned this project.
+    is "change-me" (or "change-me-mcp") for everyone who ever cloned this project.
     """
     if settings.env == "production":
-        defaulted = [name for name, value in _DEFAULT_SECRETS.items() if value == "change-me"]
+        defaulted = [name for name, value in _DEFAULT_SECRETS.items() if value.startswith("change-me")]
         if defaulted:
             raise RuntimeError(
                 f"Refusing to start in production with default secret(s): {', '.join(defaulted)}. "
