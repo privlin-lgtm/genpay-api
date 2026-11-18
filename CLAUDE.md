@@ -21,30 +21,24 @@ along the way — is in [docs/incidents.md](docs/incidents.md),
 ## Commands
 
 ```bash
-# Setup
-python -m venv .venv
-.venv/Scripts/activate            # Windows; `source .venv/bin/activate` on macOS/Linux
-pip install -r requirements.txt   # runtime deps
-pip install -r requirements-dev.txt  # + ruff, mypy, etc. for lint/type-check
-
 # Run the app (seeds demo data on startup)
 uvicorn app.main:app --reload
 
 # Tests
-pytest                              # 94 tests, in-memory SQLite, ~2s
-pytest -v
-pytest tests/test_revenue_split.py  # single file
-pytest tests/test_revenue_split.py::test_name  # single test
+pytest                              # healthy: 93 passed, 1 skipped, ~4s
+                                    # (the skip is the mcp_server/ check, until that folder exists)
 
 # Lint / type-check / architecture contracts (all run in CI)
-ruff check app/ tests/ alembic/
-mypy app/
-lint-imports                        # import-linter layering contracts in pyproject.toml
+ruff check app/ tests/ alembic/     # healthy: "All checks passed!"
+mypy app/                           # healthy: "Success: no issues found"
+lint-imports                        # healthy: "Contracts: 3 kept, 0 broken."
 
 # Migrations
 alembic upgrade head                              # apply all migrations
 alembic revision --autogenerate -m "description"  # generate one after model changes
-alembic check                                      # verify models match latest migration (CI gate)
+alembic check                                      # CI gate. healthy: "No new upgrade operations detected."
+# alembic check needs `upgrade head` on the same DATABASE_URL first, or it fails
+# with "Target database is not up to date" (CI uses a fresh SQLite file for both).
 
 # Test against real Postgres locally (CI also runs the full suite against Postgres 16)
 docker compose up -d
@@ -59,29 +53,14 @@ are the only public routes. Interactive docs at `/docs` once running.
 
 Strict layering: `app/api/` → `app/services/` → `app/repositories/` → DB.
 `api` never imports `repositories` directly; `services` never construct raw
-SQL. Enforced, not just convention: `lint-imports` checks the import
-contracts in `pyproject.toml` (`[tool.importlinter]`), and
+SQL; repositories are the only layer that touches a DB session. Enforced,
+not just convention: `lint-imports` checks the import contracts in
+`pyproject.toml` (`[tool.importlinter]`), and
 `tests/test_architecture.py` checks what import-linter can't (no
 `sqlalchemy.text`/`.execute()` in api or services, no `.commit()` outside
 `get_db()` and startup seeding, and `mcp_server/` never imports `app.*`). When
 one fails, its message states the rule and the reason: fix the code, don't
 loosen the contract.
-
-```
-app/
-├── api/            # HTTP boundary: routing, auth (require_api_key), request/response shape
-├── schemas/        # Pydantic I/O contracts, decoupled from the ORM
-├── services/        # business logic: revenue split, ledger posting, webhook dispatch
-├── repositories/    # the ONLY layer that touches a DB session — one module per entity
-├── models/          # SQLAlchemy ORM models
-├── security/         # webhook HMAC signature verification
-└── database/        # engine/session setup (db.py), seed data (seed_data.py)
-
-alembic/    # schema migrations
-tests/      # unit, integration, regression, security — see conftest.py fixture below
-docs/       # architecture, API spec, payment flow, incident write-ups
-scripts/    # reconcile.py (ledger reconciliation), capture_screenshots.py
-```
 
 ### Transaction boundary
 
@@ -169,11 +148,11 @@ transaction history — the invariant `adjust_balance`'s atomic `UPDATE` is
 supposed to guarantee at write time, checked again after the fact. Both
 `posted` and `reversed` transactions count toward the sum (both had their
 effect actually applied via `adjust_balance` when created — `reversed` is a
-display flag, not an exclusion); only get right that this includes `reversed`
-rows if you touch this function, or a refund will silently show up as a false
-discrepancy. Exposed via `GET /reconciliation` and `scripts/reconcile.py`
-(the latter for cron/scheduled use — see `.github/workflows/reconciliation.yml`
-for a runnable example, honestly scoped since this project has no deployed
+display flag, not an exclusion). If you touch this function, keep `reversed`
+rows in the sum, or a refund will silently show up as a false discrepancy.
+Exposed via `GET /reconciliation` and `scripts/reconcile.py` (the latter
+for cron/scheduled use — see `.github/workflows/reconciliation.yml` for a
+runnable example, honestly scoped since this project has no deployed
 persistent DB to actually monitor).
 
 ### Startup behavior (`app/main.py`)
@@ -188,11 +167,6 @@ step instead. Startup also refuses to boot in `ENV=production` if any secret
 
 ## Testing conventions
 
-- `tests/conftest.py`'s `client` fixture spins up an isolated DB per test
-  (in-memory SQLite by default; set `TEST_DATABASE_URL` to point it at
-  Postgres instead — CI runs the full suite against both). It seeds demo
-  data and pre-sets `X-API-Key` / `Idempotency-Key` headers on the returned
-  `TestClient`.
 - The suite runs against SQLite *and* a real Postgres 16 CI service
   container on purpose: the atomic-balance `UPDATE` and the idempotency
   claim's transaction behavior were reasoned about in terms of Postgres
