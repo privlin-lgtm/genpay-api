@@ -4,7 +4,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.constants import INTERNAL_ADMIN_CLIENT_NAME, PROCESSOR_WEBHOOK_CLIENT_NAME
+from app.constants import INTERNAL_ADMIN_CLIENT_NAME, MCP_AGENT_CLIENT_NAME, PROCESSOR_WEBHOOK_CLIENT_NAME
 from app.models.user import UserRole
 from app.repositories import api_client_repository, ledger_account_repository
 from app.schemas.historical_archive import HistoricalArchiveCreate
@@ -27,6 +27,8 @@ def seed(db: Session) -> None:
     just treats the resulting unique-constraint violation (on User.email) as
     "someone else already seeded it" and moves on.
     """
+    _ensure_mcp_agent(db)
+
     if ledger_account_repository.get_platform_account(db) is not None:
         return
 
@@ -67,6 +69,29 @@ def seed(db: Session) -> None:
                 transcriptionist_user_id=transcriptionist.id,
             ),
         )
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+
+
+def _ensure_mcp_agent(db: Session) -> None:
+    """
+    The mcp-agent client is checked on its own, before the "already seeded"
+    early return above, so a dev database seeded before the MCP server existed
+    still gets it on the next startup. Its stored key also follows
+    MCP_AGENT_API_KEY: rotating the setting retires the old key (including the
+    public dev default) on the next startup instead of leaving it valid. Same
+    race handling as seed(): a concurrent cold start that got there first is fine.
+    """
+    existing = api_client_repository.get_by_name(db, MCP_AGENT_CLIENT_NAME)
+    wanted = api_client_repository.hash_key(settings.mcp_agent_api_key)
+    if existing is not None and existing.api_key_hash == wanted:
+        return
+    try:
+        if existing is None:
+            api_client_repository.create(db, MCP_AGENT_CLIENT_NAME, settings.mcp_agent_api_key)
+        else:
+            api_client_repository.set_key(db, existing, settings.mcp_agent_api_key)
         db.commit()
     except IntegrityError:
         db.rollback()

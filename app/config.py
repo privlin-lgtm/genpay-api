@@ -9,6 +9,9 @@ class Settings(BaseSettings):
     secret_key: str = "change-me"
     webhook_signing_secret: str = "change-me"
     internal_api_key: str = "change-me"
+    # Key for the mcp-agent ApiClient. Must differ from internal_api_key: keys
+    # are looked up by hash, so two clients can't share one.
+    mcp_agent_api_key: str = "change-me-mcp"
 
     # Revenue split, in basis points (1% = 100 bps) so the default 70/20/10 split
     # is exact integer math with no floating-point representation error. Override

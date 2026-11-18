@@ -25,12 +25,11 @@ along the way — is in [docs/incidents.md](docs/incidents.md),
 uvicorn app.main:app --reload
 
 # Tests
-pytest                              # healthy: 93 passed, 1 skipped, ~4s
-                                    # (the skip is the mcp_server/ check, until that folder exists)
+pytest                              # healthy: 136 passed, ~7s
 
 # Lint / type-check / architecture contracts (all run in CI)
-ruff check app/ tests/ alembic/     # healthy: "All checks passed!"
-mypy app/                           # healthy: "Success: no issues found"
+ruff check app/ tests/ alembic/ mcp_server/   # healthy: "All checks passed!"
+mypy app/ mcp_server/                         # healthy: "Success: no issues found"
 lint-imports                        # healthy: "Contracts: 3 kept, 0 broken."
 
 # Migrations
@@ -61,6 +60,18 @@ not just convention: `lint-imports` checks the import contracts in
 `get_db()` and startup seeding, and `mcp_server/` never imports `app.*`). When
 one fails, its message states the rule and the reason: fix the code, don't
 loosen the contract.
+
+### MCP server (`mcp_server/`)
+
+Read-only MCP server (8 tools, `mcp==2.3.0` `MCPServer`, stateless streamable
+HTTP or `--stdio`): `GENPAY_MCP_API_KEY=change-me-mcp python -m mcp_server`.
+It is an HTTP client of the API and must never import `app` (enforced by
+`tests/test_architecture.py`); give it its own Pydantic output models in
+`mcp_server/models.py` rather than reusing `app.schemas`. It authenticates as
+the seeded `mcp-agent` client (`MCP_AGENT_API_KEY`). Raise
+`mcp.server.mcpserver.exceptions.ToolError` for anything the model should
+read: any other exception reaches it only as "Error executing tool". No write
+or webhook tools yet. See [docs/mcp.md](docs/mcp.md).
 
 ### Transaction boundary
 
@@ -121,11 +132,16 @@ returns the original result instead of creating a duplicate purchase.
 single shared secret compared directly), returning the resolved `ApiClient`
 so routes can stamp an actor (e.g. `Authorization.created_by_client_id`). A
 missing key returns 401, not FastAPI's default 422, since a missing key is
-an auth failure, not a malformed request. Two `ApiClient`s are seeded:
+an auth failure, not a malformed request. Three `ApiClient`s are seeded:
 `internal-admin` (key = `INTERNAL_API_KEY`, i.e. `change-me` in dev — every
 existing curl example/test still works unchanged) and `processor-webhook`, a
 system actor attributed to authorizations created via the signed webhook
-path (which never has an X-API-Key of its own to look up).
+path (which never has an X-API-Key of its own to look up), and `mcp-agent`
+(key = `MCP_AGENT_API_KEY`, `change-me-mcp` in dev), the MCP server's
+identity. `mcp-agent` is checked separately from the rest of the seed, so an
+already-seeded database still gets it (and a rotated key) on the next
+startup. It is read-only at the API: `require_api_key` returns 403 for any
+non-GET request from a client in `READ_ONLY_CLIENT_NAMES`.
 
 ### Refunds
 
@@ -162,7 +178,7 @@ persistent DB to actually monitor).
 already at the current schema and cannot express renames/backfills/constraint
 changes — real deployments should run `alembic upgrade head` as an explicit
 step instead. Startup also refuses to boot in `ENV=production` if any secret
-(`SECRET_KEY`, `WEBHOOK_SIGNING_SECRET`, `INTERNAL_API_KEY`) is still the
+(`SECRET_KEY`, `WEBHOOK_SIGNING_SECRET`, `INTERNAL_API_KEY`, `MCP_AGENT_API_KEY`) is still a
 `change-me` default.
 
 ## Testing conventions

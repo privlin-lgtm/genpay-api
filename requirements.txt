@@ -9,3 +9,6 @@ httpx==0.28.1
 pytest==9.1.1
 alembic==1.19.1
 psycopg[binary]==3.3.4
+mcp==2.3.0
+# mcp_server/ imports httpx2 directly (FastAPI's TestClient is built on it too), so pin it.
+httpx2==2.16.2

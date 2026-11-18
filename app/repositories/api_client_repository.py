@@ -25,6 +25,12 @@ def create(db: Session, name: str, raw_key: str) -> ApiClient:
     return client
 
 
+def set_key(db: Session, client: ApiClient, raw_key: str) -> ApiClient:
+    client.api_key_hash = hash_key(raw_key)
+    db.flush()
+    return client
+
+
 def get_by_key(db: Session, raw_key: str) -> ApiClient | None:
     return db.scalar(select(ApiClient).where(ApiClient.api_key_hash == hash_key(raw_key)))
 
